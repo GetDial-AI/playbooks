@@ -144,17 +144,14 @@ function handleCall(ws, callId) {
     } catch {
       return; // ignore frames we don't recognize
     }
+    // Print every message arriving from Dial.
+    console.log(`[${callId}] <- ${msg.type}`, JSON.stringify(msg));
     switch (msg.type) {
-      case "call_started":
-        console.log(`[${callId}] ${msg.direction} call ${msg.from} -> ${msg.to}`);
-        break;
       case "response_required":
       case "reminder_required":
         void answer(msg.response_id, msg.transcript);
         break;
-      case "transcript_update":
-        // Live transcript; nothing to do until Dial asks for a turn.
-        break;
+      // call_started / transcript_update: nothing to do beyond the log above.
     }
   });
 
