@@ -30,8 +30,14 @@ if (!SIGNING_SECRET) throw new Error("DIAL_SIGNING_SECRET is required");
 
 const openai = new OpenAI();
 
-const SYSTEM_PROMPT =
-  "You are a friendly, concise voice agent on a phone call. Keep replies short and natural. " +
+// Used until `call_started` arrives with Dial's per-call instruction (the
+// system_prompt — your outbound/inbound instruction plus Dial's general context
+// like the current time and the voice's gender).
+const DEFAULT_PROMPT =
+  "You are a friendly, concise voice agent on a phone call. Keep replies short and natural.";
+
+// Appended to the active system prompt so the model knows it can hang up.
+const END_CALL_HINT =
   "When the conversation is finished or the caller wants to hang up, call the end_call tool " +
   "with a brief, natural farewell instead of replying with text.";
 
@@ -74,10 +80,10 @@ server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => handleCall(ws, callId));
 });
 
-/** Map the Dial transcript to OpenAI chat messages. */
-function toMessages(transcript) {
+/** Map the Dial transcript to OpenAI chat messages under the given system prompt. */
+function toMessages(instruction, transcript) {
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: `${instruction}\n\n${END_CALL_HINT}` },
     ...transcript.map((t) => ({ role: t.role === "agent" ? "assistant" : "user", content: t.content })),
   ];
 }
@@ -85,6 +91,7 @@ function toMessages(transcript) {
 function handleCall(ws, callId) {
   console.log(`[${callId}] connected`);
   let inFlight = null; // AbortController for the current OpenAI stream
+  let systemInstruction = DEFAULT_PROMPT; // replaced by call_started.instruction
 
   const cancelInFlight = () => {
     if (inFlight) {
@@ -100,7 +107,7 @@ function handleCall(ws, callId) {
     inFlight = controller;
     try {
       const stream = await openai.chat.completions.create(
-        { model: MODEL, messages: toMessages(transcript), stream: true, tools: TOOLS, tool_choice: "auto" },
+        { model: MODEL, messages: toMessages(systemInstruction, transcript), stream: true, tools: TOOLS, tool_choice: "auto" },
         { signal: controller.signal },
       );
       let toolName = "";
@@ -144,14 +151,18 @@ function handleCall(ws, callId) {
     } catch {
       return; // ignore frames we don't recognize
     }
-    // Print every message arriving from Dial.
+    // Print every message arriving from Dial (already debounced/deduped by Dial).
     console.log(`[${callId}] <- ${msg.type}`, JSON.stringify(msg));
     switch (msg.type) {
+      case "call_started":
+        // Use Dial's per-call instruction (system_prompt + general context) as
+        // the system prompt; falls back to DEFAULT_PROMPT when absent.
+        if (msg.instruction) systemInstruction = msg.instruction;
+        break;
       case "response_required":
       case "reminder_required":
         void answer(msg.response_id, msg.transcript);
         break;
-      // call_started / transcript_update: nothing to do beyond the log above.
     }
   });
 
