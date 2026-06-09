@@ -1,10 +1,12 @@
 import http from "node:http";
-import { WebSocketServer } from "ws";
+import { WebSocketServer, type WebSocket } from "ws";
 import OpenAI from "openai";
 import {
   parseDialMessage,
   serializeServerMessage,
   verifyDialSignature,
+  type DialServerMessage,
+  type TranscriptItem,
 } from "@getdial/sdk";
 
 /**
@@ -30,7 +32,7 @@ if (!SIGNING_SECRET) throw new Error("DIAL_SIGNING_SECRET is required");
 
 const openai = new OpenAI();
 
-// Used until `call_started` arrives with Dial's per-call instruction (the
+// Used until `call_connected` arrives with Dial's per-call instruction (the
 // system_prompt — your outbound/inbound instruction plus Dial's general context
 // like the current time and the voice's gender).
 const DEFAULT_PROMPT =
@@ -45,7 +47,7 @@ const END_CALL_HINT =
 // tools away — there's no tool channel on the wire — so when the model calls
 // end_call we simply send a `response` with `end_call: true`, which tells Dial
 // to hang up after the farewell is spoken.
-const TOOLS = [
+const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
@@ -67,7 +69,7 @@ const server = http.createServer();
 const wss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-  const url = new URL(req.url, "http://localhost");
+  const url = new URL(req.url ?? "", "http://localhost");
   const callId = url.pathname.split("/").filter(Boolean).pop();
   const signature = req.headers["x-dial-signature"];
 
@@ -81,26 +83,28 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 /** Map the Dial transcript to OpenAI chat messages under the given system prompt. */
-function toMessages(instruction, transcript) {
+function toMessages(instruction: string, transcript: TranscriptItem[]): OpenAI.Chat.ChatCompletionMessageParam[] {
   return [
     { role: "system", content: `${instruction}\n\n${END_CALL_HINT}` },
-    ...transcript.map((t) => ({ role: t.role === "agent" ? "assistant" : "user", content: t.content })),
+    ...transcript.map((t): OpenAI.Chat.ChatCompletionMessageParam =>
+      t.role === "agent" ? { role: "assistant", content: t.content } : { role: "user", content: t.content },
+    ),
   ];
 }
 
-function handleCall(ws, callId) {
+function handleCall(ws: WebSocket, callId: string): void {
   console.log(`[${callId}] connected`);
-  let inFlight = null; // AbortController for the current OpenAI stream
-  let systemInstruction = DEFAULT_PROMPT; // replaced by call_started.instruction
+  let inFlight: AbortController | null = null; // the current OpenAI stream
+  let systemInstruction = DEFAULT_PROMPT; // replaced by call_connected.instruction
 
-  const cancelInFlight = () => {
+  const cancelInFlight = (): void => {
     if (inFlight) {
       inFlight.abort();
       inFlight = null;
     }
   };
 
-  async function answer(responseId, transcript) {
+  async function answer(responseId: number, transcript: TranscriptItem[]): Promise<void> {
     // Interrupt focus: a new turn supersedes any response still streaming.
     cancelInFlight();
     const controller = new AbortController();
@@ -145,7 +149,7 @@ function handleCall(ws, callId) {
   }
 
   ws.on("message", (raw) => {
-    let msg;
+    let msg: DialServerMessage;
     try {
       msg = parseDialMessage(raw.toString());
     } catch {

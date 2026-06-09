@@ -18,6 +18,9 @@ cp .env.example .env   # fill in OPENAI_API_KEY and DIAL_SIGNING_SECRET
 npm start              # listens on :8080
 ```
 
+Written in **TypeScript** and run directly with [`tsx`](https://tsx.is) — no build
+step. `npm run typecheck` type-checks `server.ts` against the SDK's protocol types.
+
 Expose it with [ngrok](https://ngrok.com) and use the **wss** URL:
 
 ```bash
