@@ -1,0 +1,15 @@
+{
+  "name": "dial-self-hosted-playbook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference WebSocket server for Dial Self-Hosted mode: drives calls with the OpenAI SDK, focused on transcript interrupts.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@getdial/sdk": "^0.5.0",
+    "openai": "^4.70.0",
+    "ws": "^8.21.0"
+  }
+}
