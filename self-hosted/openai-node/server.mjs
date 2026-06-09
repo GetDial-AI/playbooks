@@ -154,10 +154,15 @@ function handleCall(ws, callId) {
     // Print every message arriving from Dial (already debounced/deduped by Dial).
     console.log(`[${callId}] <- ${msg.type}`, JSON.stringify(msg));
     switch (msg.type) {
-      case "call_started":
-        // Use Dial's per-call instruction (system_prompt + general context) as
-        // the system prompt; falls back to DEFAULT_PROMPT when absent.
+      case "call_connected":
+        // Sent on connect (and reconnect). Use Dial's per-call instruction
+        // (system_prompt + general context) as the system prompt; falls back to
+        // DEFAULT_PROMPT when absent.
         if (msg.instruction) systemInstruction = msg.instruction;
+        break;
+      case "ping_pong":
+        // Keepalive: echo it straight back so Dial knows we're alive.
+        ws.send(serializeServerMessage({ type: "ping_pong", timestamp: msg.timestamp }));
         break;
       case "response_required":
       case "reminder_required":
