@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Reference WebSocket server for Dial Self-Hosted mode: drives calls with the OpenAI SDK, focused on transcript interrupts.",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node --env-file-if-exists=.env server.mjs"
   },
   "dependencies": {
     "@getdial/sdk": "^0.6.0",
