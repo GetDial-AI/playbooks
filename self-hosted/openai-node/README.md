@@ -47,6 +47,14 @@ answers the new turn — superseding the stale reply. That's the whole trick:
 keep an `AbortController` per turn and cancel it the moment Dial asks for the
 next one.
 
+## Ending the call
+
+The model gets an `end_call` **OpenAI function tool**. This is an *OpenAI* tool
+that lives inside this server — the Dial protocol itself has no tool channel.
+When the model calls `end_call`, the server maps it to a `response` with
+`end_call: true`, which tells Dial to hang up after the farewell is spoken.
+
 ## Not handled (kept minimal)
 
-No tools, no per-word timing, no metadata channel — matching the v1 protocol.
+No per-word timing and no metadata channel — matching the v1 protocol. (The
+`end_call` tool above is the model's own OpenAI tool, not a Dial-protocol tool.)

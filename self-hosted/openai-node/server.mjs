@@ -31,7 +31,31 @@ if (!SIGNING_SECRET) throw new Error("DIAL_SIGNING_SECRET is required");
 const openai = new OpenAI();
 
 const SYSTEM_PROMPT =
-  "You are a friendly, concise voice agent on a phone call. Keep replies short and natural.";
+  "You are a friendly, concise voice agent on a phone call. Keep replies short and natural. " +
+  "When the conversation is finished or the caller wants to hang up, call the end_call tool " +
+  "with a brief, natural farewell instead of replying with text.";
+
+// OpenAI function tools live *inside* this server. The Dial protocol abstracts
+// tools away — there's no tool channel on the wire — so when the model calls
+// end_call we simply send a `response` with `end_call: true`, which tells Dial
+// to hang up after the farewell is spoken.
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "end_call",
+      description:
+        "End the phone call. Use when the task is complete, the caller says goodbye, or the conversation has naturally concluded.",
+      parameters: {
+        type: "object",
+        properties: {
+          farewell: { type: "string", description: "A short, natural goodbye to say before hanging up." },
+        },
+        required: ["farewell"],
+      },
+    },
+  },
+];
 
 const server = http.createServer();
 const wss = new WebSocketServer({ noServer: true });
@@ -76,17 +100,33 @@ function handleCall(ws, callId) {
     inFlight = controller;
     try {
       const stream = await openai.chat.completions.create(
-        { model: MODEL, messages: toMessages(transcript), stream: true },
+        { model: MODEL, messages: toMessages(transcript), stream: true, tools: TOOLS, tool_choice: "auto" },
         { signal: controller.signal },
       );
+      let toolName = "";
+      let toolArgs = "";
       for await (const chunk of stream) {
         if (controller.signal.aborted) return; // superseded by a newer turn
-        const delta = chunk.choices[0]?.delta?.content;
-        if (delta) {
-          ws.send(serializeServerMessage({ type: "response", response_id: responseId, content: delta, content_complete: false }));
+        const delta = chunk.choices[0]?.delta;
+        if (delta?.content) {
+          ws.send(serializeServerMessage({ type: "response", response_id: responseId, content: delta.content, content_complete: false }));
         }
+        const call = delta?.tool_calls?.[0];
+        if (call?.function?.name) toolName = call.function.name;
+        if (call?.function?.arguments) toolArgs += call.function.arguments;
       }
-      if (!controller.signal.aborted) {
+      if (controller.signal.aborted) return;
+
+      if (toolName === "end_call") {
+        // Map the model's tool call to the protocol's end_call: speak the
+        // farewell, then Dial hangs up.
+        let farewell = "Thanks for calling — goodbye!";
+        try {
+          const args = JSON.parse(toolArgs || "{}");
+          if (typeof args.farewell === "string" && args.farewell.trim()) farewell = args.farewell;
+        } catch { /* keep the default farewell */ }
+        ws.send(serializeServerMessage({ type: "response", response_id: responseId, content: farewell, content_complete: true, end_call: true }));
+      } else {
         ws.send(serializeServerMessage({ type: "response", response_id: responseId, content: "", content_complete: true }));
       }
     } catch (err) {
