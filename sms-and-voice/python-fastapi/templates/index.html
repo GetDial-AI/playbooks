@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dial Dashboard</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📞</span>
+      <div>
+        <h1>Dial Dashboard</h1>
+        <p class="sub">Place AI voice calls · send &amp; receive SMS</p>
+      </div>
+    </div>
+    <div class="myline">
+      {% if default_number %}
+        <span class="num-label">Your number</span>
+        <span class="num">{{ default_number.number }}</span>
+        <span class="caps">{{ default_number.capabilities }}</span>
+      {% else %}
+        <span class="num warn">No number provisioned</span>
+      {% endif %}
+      <span id="wsdot" class="dot off" title="Live connection"></span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <!-- Place a call -->
+    <section class="card">
+      <h2>🗣️ Place an AI Voice Call</h2>
+      <form id="callForm">
+        <label>To (E.164)
+          <input name="to" placeholder="+14155550123" autocomplete="off" required />
+        </label>
+        <label>Agent instruction (what the AI should say/do)
+          <textarea name="instruction" rows="4" required
+            placeholder="You are calling on behalf of Gal. Politely confirm the 3pm dentist appointment tomorrow and ask if parking is available."></textarea>
+        </label>
+        <label>Language (optional)
+          <input name="language" placeholder="en-US" autocomplete="off" />
+        </label>
+        <button type="submit">Call now</button>
+        <p class="formstatus" id="callStatus"></p>
+      </form>
+    </section>
+
+    <!-- Send SMS -->
+    <section class="card">
+      <h2>💬 Send an SMS</h2>
+      <form id="smsForm">
+        <label>To (E.164)
+          <input name="to" placeholder="+14155550123" autocomplete="off" required />
+        </label>
+        <label>Message
+          <textarea name="body" rows="4" required placeholder="Hi! This is a test from my Dial number."></textarea>
+        </label>
+        <button type="submit">Send SMS</button>
+        <p class="formstatus" id="smsStatus"></p>
+      </form>
+    </section>
+
+    <!-- Live inbox -->
+    <section class="card span2">
+      <div class="card-head">
+        <h2>📨 Live Inbox &amp; Events</h2>
+        <div class="head-actions">
+          <span id="wsstatus" class="pill">connecting…</span>
+          <button class="ghost" id="refreshInbox">Reload history</button>
+        </div>
+      </div>
+      <div id="feed" class="feed">
+        <p class="empty">Waiting for inbound SMS and call events… Text or call
+          {% if default_number %}<strong>{{ default_number.number }}</strong>{% else %}your Dial number{% endif %}
+          to see it appear here live.</p>
+      </div>
+    </section>
+
+    <!-- Call history -->
+    <section class="card span2">
+      <div class="card-head">
+        <h2>📋 Call History</h2>
+        <button class="ghost" id="refreshCalls">Refresh</button>
+      </div>
+      <div id="calls" class="calls"><p class="empty">No calls yet.</p></div>
+    </section>
+  </main>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-box">
+      <button class="modal-close" id="modalClose">✕</button>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    window.__DEFAULT_NUMBER_ID__ = {{ (default_number.id if default_number else None) | tojson }};
+  </script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

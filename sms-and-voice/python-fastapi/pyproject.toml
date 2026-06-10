@@ -1,0 +1,14 @@
+[project]
+name = "dial-dashboard"
+version = "0.1.0"
+description = "Web dashboard to place AI voice calls and send/receive SMS via the Dial SDK"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dial-sdk>=0.6.2",
+    "fastapi>=0.136.3",
+    "jinja2>=3.1.6",
+    "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.49.0",
+]
