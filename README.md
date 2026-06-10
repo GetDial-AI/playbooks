@@ -1,6 +1,10 @@
 # Dial Playbooks
 
-Runnable reference implementations for building on [Dial](https://getdial.ai).
+Runnable reference implementations for building on [Dial](https://getdial.ai) — give your
+software a real phone number to **send & receive SMS** and **place AI-driven voice calls**.
+You can call the Dial API directly, bring your own LLM over a WebSocket, or drive everything
+from an **LLM agent** using the [`dial-langchain`](https://pypi.org/project/dial-langchain/) tools.
+
 Each playbook is a **self-contained example in its own directory** — clone the repo,
 drop in your Dial API key, and run it.
 
