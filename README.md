@@ -30,6 +30,7 @@ Bring your own LLM over a WebSocket — see the
 | Playbook | Language | What it shows |
 |---|---|---|
 | [`self-hosted/openai-node`](./self-hosted/openai-node) | Node.js | Driving calls with the OpenAI SDK, focused on transcript interrupts |
+| [`self-hosted/openai-python`](./self-hosted/openai-python) | Python | The same, in Python — driving calls with the OpenAI SDK over the `dial-sdk` protocol types, focused on transcript interrupts |
 
 ### LangChain
 
