@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dial Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">📞</span>
+      <div>
+        <h1>Dial Dashboard</h1>
+        <p class="subtitle">Call numbers & receive SMS — powered by <code>dial-langchain</code></p>
+      </div>
+    </div>
+    <div class="account" id="account">
+      <div class="account-line"><span class="dot" id="conn-dot"></span><span id="acct-email">…</span></div>
+      <div class="account-num" id="acct-number">…</div>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid">
+      <!-- Send SMS -->
+      <div class="card">
+        <h2>✉️ Send SMS</h2>
+        <form id="sms-form">
+          <label>To (E.164)
+            <input name="to" placeholder="+14155550123" autocomplete="off" required />
+          </label>
+          <label>From
+            <select name="from_number_id" id="sms-from"></select>
+          </label>
+          <label>Message
+            <textarea name="body" rows="3" placeholder="Your message…" required></textarea>
+          </label>
+          <button type="submit" class="btn primary">Send SMS</button>
+          <p class="form-result" id="sms-result"></p>
+        </form>
+      </div>
+
+      <!-- Make Call -->
+      <div class="card">
+        <h2>🤖 Place AI Voice Call</h2>
+        <form id="call-form">
+          <label>To (E.164)
+            <input name="to" placeholder="+14155550123" autocomplete="off" required />
+          </label>
+          <label>From
+            <select name="from_number_id" id="call-from"></select>
+          </label>
+          <label>What should the AI do on the call?
+            <textarea name="outbound_instruction" rows="3" placeholder="You are my assistant. Greet them, confirm tomorrow's 3pm meeting, and ask if they need to reschedule." required></textarea>
+          </label>
+          <label>Language <span class="hint">(optional — auto-detected if blank)</span>
+            <input name="language" placeholder="en-US, he-IL, …" autocomplete="off" />
+          </label>
+          <button type="submit" class="btn primary">Start Call</button>
+          <p class="form-result" id="call-result"></p>
+        </form>
+      </div>
+    </section>
+
+    <section class="grid">
+      <!-- Inbox -->
+      <div class="card wide">
+        <div class="card-head">
+          <h2>📥 Inbox <span class="badge" id="msg-count">0</span></h2>
+          <div class="head-actions">
+            <label class="toggle"><input type="checkbox" id="autorefresh" checked /> Auto-refresh</label>
+            <button class="btn ghost" id="refresh-msgs">↻</button>
+          </div>
+        </div>
+        <p class="muted small" id="inbox-hint">Texts sent to your number appear here.</p>
+        <div class="list" id="messages"></div>
+      </div>
+
+      <!-- Calls -->
+      <div class="card wide">
+        <div class="card-head">
+          <h2>☎️ Call History <span class="badge" id="call-count">0</span></h2>
+          <button class="btn ghost" id="refresh-calls">↻</button>
+        </div>
+        <div class="list" id="calls"></div>
+      </div>
+    </section>
+    <section class="grid">
+      <!-- AI Agent -->
+      <div class="card wide span2">
+        <div class="card-head">
+          <h2>🧠 AI Agent <span class="badge" id="agent-provider">…</span></h2>
+          <span class="muted small" id="agent-model"></span>
+        </div>
+        <p class="muted small">Type a natural-language instruction. The LangChain agent decides which <code>dial-langchain</code> tools to call. Provider is set in <code>.env</code> (<code>fake</code> needs no key &amp; runs offline).</p>
+        <form id="agent-form">
+          <textarea name="input" rows="2" placeholder="e.g. How many numbers do I have? — or — Text +14155550123 saying hi" required></textarea>
+          <div class="agent-controls">
+            <label class="toggle"><input type="checkbox" id="agent-writes" /> Allow write actions (send SMS / place calls)</label>
+            <button type="submit" class="btn primary" style="width:auto;">Run agent</button>
+          </div>
+          <p class="form-result" id="agent-error"></p>
+        </form>
+        <div id="agent-output"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Call transcript modal -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-title">Call</h3>
+        <button class="btn ghost" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
