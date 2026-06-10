@@ -31,14 +31,14 @@ Bring your own LLM over a WebSocket — see the
 |---|---|---|
 | [`self-hosted/openai-node`](./self-hosted/openai-node) | Node.js | Driving calls with the OpenAI SDK, focused on transcript interrupts |
 
-### LangChain
+### AI Agent
 
 Drive Dial from a [LangChain](https://www.langchain.com/) agent using the
 [`dial-langchain`](https://pypi.org/project/dial-langchain/) tools, with a pluggable LLM.
 
 | Playbook | Language | What it shows |
 |---|---|---|
-| [`langchain/python-fastapi`](./langchain/python-fastapi) | Python (FastAPI) | A tool-calling agent over the `dial-langchain` tools — a fake offline LLM or a real OpenAI/OpenRouter model via `.env` — plus a dashboard for SMS, AI voice calls, inbox, and transcripts |
+| [`ai-agent/python-langchain`](./ai-agent/python-langchain) | Python (LangChain) | A tool-calling agent over the `dial-langchain` tools — a fake offline LLM or a real OpenAI/OpenRouter model via `.env` — plus a dashboard for SMS, AI voice calls, inbox, and transcripts |
 
 ## Running a playbook
 
