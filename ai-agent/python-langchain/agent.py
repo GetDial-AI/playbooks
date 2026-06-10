@@ -26,17 +26,6 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from dial_langchain import DialToolkit
 
-# valid arg keys per tool -- used to sanitize whatever the LLM proposes
-TOOL_ARGS = {
-    "list_numbers": [],
-    "list_messages": ["number_id", "direction"],
-    "list_calls": ["number_id", "direction"],
-    "get_call": ["call_id"],
-    "send_message": ["to", "from_number_id", "body", "channel"],
-    "make_call": ["to", "from_number_id", "outbound_instruction", "language"],
-    "set_number_properties": ["number_id", "inbound_instruction", "nickname"],
-    "purchase_number": ["country", "area_code"],
-}
 READ_TOOLS = {"list_numbers", "list_messages", "list_calls", "get_call"}
 WRITE_TOOLS = {"send_message", "make_call", "set_number_properties", "purchase_number"}
 
@@ -145,19 +134,22 @@ async def run_agent(
             return {"output": ai.content or "(no output)", "steps": steps, "provider": p}
         for tc in tool_calls:
             name = tc["name"]
-            raw_args = tc.get("args") or {}
-            allowed = TOOL_ARGS.get(name)
-            args = {k: v for k, v in raw_args.items() if allowed is None or k in allowed}
-            if name in ("send_message", "make_call") and not args.get("from_number_id") and default_number_id:
-                args["from_number_id"] = default_number_id
             tool = tools.get(name)
             if tool is None:
                 result = f"Tool '{name}' is not available (writes disabled?)."
-            else:
-                try:
-                    result = await tool.ainvoke(args)
-                except Exception as e:
-                    result = f"Error running {name}: {e}"
+                steps.append({"tool": name, "args": tc.get("args") or {}, "result": result})
+                messages.append(ToolMessage(content=str(result), tool_call_id=tc.get("id") or name))
+                continue
+            # Accept only keys the tool's own schema declares; drop the degenerate
+            # "args"/"kwargs" placeholders some tools (e.g. list_numbers) still expose.
+            allowed = set(tool.args) - {"args", "kwargs"}
+            args = {k: v for k, v in (tc.get("args") or {}).items() if k in allowed}
+            if name in ("send_message", "make_call") and not args.get("from_number_id") and default_number_id:
+                args["from_number_id"] = default_number_id
+            try:
+                result = await tool.ainvoke(args)
+            except Exception as e:
+                result = f"Error running {name}: {e}"
             steps.append({"tool": name, "args": args, "result": str(result)})
             messages.append(ToolMessage(content=str(result), tool_call_id=tc.get("id") or name))
         step += 1
