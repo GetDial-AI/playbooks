@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from dial_sdk import DialClient, DialConfig
-from dial_langchain import MakeCallTool, SendMessageTool
+from dial_langchain import DialToolkit
 
 # ── Auth: the ONLY thing we load is DIAL_API_KEY from .env ────────────────────
 
@@ -42,8 +42,9 @@ def _client() -> DialClient:
     return DialClient(DialConfig(api_key=API_KEY))
 
 
-def _tool_kwargs() -> dict:
-    return {"api_key": API_KEY}
+def _dial_tool(name: str):
+    """Fetch a single dial-langchain tool by name from the official toolkit."""
+    return {t.name: t for t in DialToolkit(api_key=API_KEY).get_tools()}[name]
 
 
 async def _default_number_id() -> Optional[str]:
@@ -213,7 +214,7 @@ async def send_sms(p: SendPayload):
     from_id = p.from_number_id or await _default_number_id()
     if not from_id:
         raise HTTPException(400, "No from_number_id available")
-    tool = SendMessageTool(**_tool_kwargs())
+    tool = _dial_tool("send_message")
     try:
         result = await tool.arun(
             {"to": to, "from_number_id": from_id, "body": p.body, "channel": p.channel}
@@ -231,7 +232,7 @@ async def make_call(p: CallPayload):
     from_id = p.from_number_id or await _default_number_id()
     if not from_id:
         raise HTTPException(400, "No from_number_id available")
-    tool = MakeCallTool(**_tool_kwargs())
+    tool = _dial_tool("make_call")
     args = {"to": to, "from_number_id": from_id, "outbound_instruction": p.outbound_instruction}
     if p.language:
         args["language"] = p.language

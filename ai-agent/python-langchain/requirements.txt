@@ -1,4 +1,4 @@
-dial-langchain>=0.5.0
+dial-langchain>=0.6.0
 fastapi>=0.110
 uvicorn[standard]>=0.27
 python-dotenv>=1.0

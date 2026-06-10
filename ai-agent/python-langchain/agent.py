@@ -24,16 +24,7 @@ from typing import Any, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from dial_langchain import (
-    ListNumbersTool,
-    ListMessagesTool,
-    ListCallsTool,
-    GetCallTool,
-    SendMessageTool,
-    MakeCallTool,
-    SetNumberPropertiesTool,
-    PurchaseNumberTool,
-)
+from dial_langchain import DialToolkit
 
 # valid arg keys per tool -- used to sanitize whatever the LLM proposes
 TOOL_ARGS = {
@@ -68,17 +59,8 @@ def agent_info() -> dict:
 
 
 def _build_tools(api_key: str, allow_writes: bool) -> "dict[str, Any]":
-    kw = {"api_key": api_key}
-    catalog = {
-        "list_numbers": ListNumbersTool(**kw),
-        "list_messages": ListMessagesTool(**kw),
-        "list_calls": ListCallsTool(**kw),
-        "get_call": GetCallTool(**kw),
-        "send_message": SendMessageTool(**kw),
-        "make_call": MakeCallTool(**kw),
-        "set_number_properties": SetNumberPropertiesTool(**kw),
-        "purchase_number": PurchaseNumberTool(**kw),
-    }
+    # Source every tool from the official toolkit, then gate by read/write.
+    catalog = {t.name: t for t in DialToolkit(api_key=api_key).get_tools()}
     names = READ_TOOLS | (WRITE_TOOLS if allow_writes else set())
     return {n: t for n, t in catalog.items() if n in names}
 
