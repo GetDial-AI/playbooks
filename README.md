@@ -20,6 +20,7 @@ Send and receive SMS, and place AI-driven voice calls with the Dial SDK.
 | Playbook | Language | What it shows |
 |---|---|---|
 | [`sms-and-voice/python-fastapi`](./sms-and-voice/python-fastapi) | Python (FastAPI) | A web dashboard that places AI voice calls, sends SMS, and streams inbound SMS/call events live over a WebSocket |
+| [`sms-and-voice/node-express`](./sms-and-voice/node-express) | Node.js (Express) | The same dashboard in Node — places AI voice calls, sends SMS, and streams inbound SMS/call events live over a WebSocket |
 
 ### Self-Hosted
 
