@@ -226,7 +226,7 @@ function renderAgent(res) {
   const box = $("#agent-output");
   let html = "";
   if (res.steps && res.steps.length) {
-    html += res.steps.map((s) => `<div class="agent-step">
+    html += res.steps.slice().reverse().map((s) => `<div class="agent-step">
         <span class="tool">🔧 ${esc(s.tool)}</span>
         <div class="args">args: ${esc(JSON.stringify(s.args))}</div>
         <pre>${esc(s.result)}</pre>

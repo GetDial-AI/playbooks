@@ -132,7 +132,7 @@ async def run_agent(
     allow_writes: bool,
     default_number: Optional[str],
     default_number_id: Optional[str],
-    max_steps: int = 6,
+    max_steps: Optional[int] = None,  # None = unlimited tool calls
 ) -> dict:
     tools = _build_tools(api_key, allow_writes)
     sys = _system_prompt(default_number, default_number_id, allow_writes)
@@ -154,7 +154,8 @@ async def run_agent(
         llm = _build_llm()
         runnable = llm.bind_tools(list(tools.values()))
 
-    for _ in range(max_steps):
+    step = 0
+    while max_steps is None or step < max_steps:
         ai = await runnable.ainvoke(messages)
         messages.append(ai)
         tool_calls = getattr(ai, "tool_calls", None) or []
@@ -177,5 +178,6 @@ async def run_agent(
                     result = f"Error running {name}: {e}"
             steps.append({"tool": name, "args": args, "result": str(result)})
             messages.append(ToolMessage(content=str(result), tool_call_id=tc.get("id") or name))
+        step += 1
 
     return {"output": "(stopped: reached max steps)", "steps": steps, "provider": p}
