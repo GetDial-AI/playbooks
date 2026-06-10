@@ -1,0 +1,19 @@
+[project]
+name = "dial-self-hosted-playbook-python"
+version = "0.1.0"
+description = "Reference WebSocket server for Dial Self-Hosted mode: drives calls with the OpenAI SDK, focused on transcript interrupts. Python port using dial-sdk."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dial-sdk>=0.6.2",
+    "openai>=1.0.0",
+    "websockets>=14.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+py-modules = ["server"]
