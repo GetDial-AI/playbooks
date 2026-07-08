@@ -7,7 +7,8 @@ caller's audio straight back — so the caller hears themselves. Press ``#`` to
 hang up. It's the smallest possible conformant server; swap the echo for your
 own speech-to-speech model or STT->LLM->TTS chain.
 
-Speaks the Self-hosted audio protocol via ``dial-sdk``'s ``AudioPipeSession``
+The SDK (``dial-sdk``) gives you the protocol models + ``parse_dial_audio_message``
+/ ``serialize_server_audio_message``; you own the WebSocket loop
 (https://docs.getdial.ai/api-reference/self-hosted-audio-protocol).
 
 Env: PORT (default 8080), DIAL_SIGNING_SECRET (copy it from the dashboard).
@@ -20,11 +21,18 @@ import http
 import os
 
 from dotenv import load_dotenv
+from pydantic import ValidationError
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.exceptions import ConnectionClosed
 from websockets.http11 import Request
 
-from dial_sdk import AudioPipeSession, verify_dial_signature
+from dial_sdk import (
+    parse_dial_audio_message,
+    serialize_server_audio_message,
+    verify_dial_signature,
+)
+from dial_sdk.self_hosted import PingPong
+from dial_sdk.self_hosted_audio import ServerAudioMedia, ServerEndCall
 
 load_dotenv()
 
@@ -47,21 +55,25 @@ def authorize(connection: ServerConnection, request: Request):
 
 async def handle_call(ws: ServerConnection) -> None:
     call_id = _call_id_from_path(ws.request.path)
-
-    async def on_connected(info):
-        tag = " [reconnect]" if info.reconnect else ""
-        print(f"[{call_id}] call {info.call_id} ({info.direction}){tag}")
-
-    session = AudioPipeSession(
-        ws.send,
-        on_call_connected=on_connected,
-        on_media=lambda audio, seq: session.send_media(audio),  # echo
-        on_dtmf=lambda digit: session.end_call() if digit == "#" else None,
-        on_call_ended=lambda reason: print(f"[{call_id}] ended: {reason}"),
-    )
     try:
         async for raw in ws:
-            await session.dispatch(raw)
+            try:
+                msg = parse_dial_audio_message(raw)
+            except ValidationError:
+                continue  # a malformed frame must not kill the call
+            if msg.type == "call_connected":
+                tag = " [reconnect]" if msg.reconnect else ""
+                print(f"[{call_id}] call {msg.call_id} ({msg.direction}){tag}")
+            elif msg.type == "media":
+                # Echo the same audio back. A real agent would base64-decode
+                # msg.payload, run its stack, and re-encode.
+                await ws.send(serialize_server_audio_message(ServerAudioMedia(payload=msg.payload)))
+            elif msg.type == "dtmf" and msg.digit == "#":
+                await ws.send(serialize_server_audio_message(ServerEndCall()))
+            elif msg.type == "ping_pong":
+                await ws.send(serialize_server_audio_message(PingPong(type="ping_pong", timestamp=msg.timestamp)))
+            elif msg.type == "call_ended":
+                print(f"[{call_id}] ended: {msg.reason}")
     except ConnectionClosed:
         pass
     finally:

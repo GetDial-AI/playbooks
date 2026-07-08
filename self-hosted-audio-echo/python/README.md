@@ -6,9 +6,9 @@ server echoes it straight back — so the caller hears themselves. Press `#` to
 hang up.
 
 It speaks the [Self-hosted audio protocol](https://docs.getdial.ai/api-reference/self-hosted-audio-protocol)
-via [`dial-sdk`](https://pypi.org/project/dial-sdk/)'s `AudioPipeSession`
-(signature verification, base64↔bytes codec, keepalive — you just write
-`on_media`).
+via [`dial-sdk`](https://pypi.org/project/dial-sdk/) — the SDK gives you
+`verify_dial_signature`, `parse_dial_audio_message`, and
+`serialize_server_audio_message`; the server owns the small WebSocket loop.
 
 ## Run it
 
@@ -26,14 +26,14 @@ yourself.
 
 ## Make it yours
 
-Replace the one echo line —
+Replace the echo `media` branch —
 
 ```python
-on_media=lambda audio, seq: session.send_media(audio),
+await ws.send(serialize_server_audio_message(ServerAudioMedia(payload=msg.payload)))
 ```
 
-— with your own voice stack: feed `audio` (raw bytes in your configured inbound
-format) to a speech-to-speech model or an STT→LLM→TTS chain, and stream the
-agent's audio back with `session.send_media(...)`. Use `session.clear()` for
-barge-in and `session.end_call()` to hang up. Formats are set per-direction in
-the dashboard (default `mulaw_8000`).
+— with your own voice stack: `base64.b64decode(msg.payload)` gives the raw audio
+(in your configured inbound format); feed it to a speech-to-speech model or an
+STT→LLM→TTS chain, and stream the agent's audio back as `ServerAudioMedia`. Send
+`ServerClear()` for barge-in and `ServerEndCall()` to hang up. Formats are set
+per-direction in the dashboard (default `mulaw_8000`).

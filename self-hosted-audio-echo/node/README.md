@@ -6,9 +6,9 @@ server echoes it straight back — so the caller hears themselves. Press `#` to
 hang up.
 
 It speaks the [Self-hosted audio protocol](https://docs.getdial.ai/api-reference/self-hosted-audio-protocol)
-via [`@getdial/sdk`](https://www.npmjs.com/package/@getdial/sdk)'s
-`AudioPipeSession` (signature verification, base64↔Buffer codec, keepalive — you
-just write `onMedia`).
+via [`@getdial/sdk`](https://www.npmjs.com/package/@getdial/sdk) — the SDK gives
+you `verifyDialSignature`, `parseDialAudioMessage`, and
+`serializeServerAudioMessage`; the server owns the small WebSocket loop.
 
 ## Run it
 
@@ -26,14 +26,15 @@ yourself.
 
 ## Make it yours
 
-Replace the one echo line —
+Replace the echo `case "media"` —
 
 ```ts
-onMedia: (audio) => session.sendMedia(audio),
+ws.send(serializeServerAudioMessage({ type: "media", payload: msg.payload }));
 ```
 
-— with your own voice stack: feed `audio` (raw bytes in your configured inbound
-format) to a speech-to-speech model or an STT→LLM→TTS chain, and stream the
-agent's audio back with `session.sendMedia(...)`. Use `session.clear()` for
-barge-in and `session.endCall()` to hang up. Formats are set per-direction in the
+— with your own voice stack: `Buffer.from(msg.payload, "base64")` gives the raw
+audio (in your configured inbound format); feed it to a speech-to-speech model
+or an STT→LLM→TTS chain, and stream the agent's audio back as
+`{ type: "media", payload: <base64> }`. Send `{ type: "clear" }` for barge-in
+and `{ type: "end_call" }` to hang up. Formats are set per-direction in the
 dashboard (default `mulaw_8000`).
