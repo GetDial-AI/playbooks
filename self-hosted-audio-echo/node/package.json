@@ -1,0 +1,21 @@
+{
+  "name": "dial-self-hosted-audio-echo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Stupid-simple Dial Self-Hosted AUDIO server: echoes the caller's audio back, on @getdial/sdk.",
+  "scripts": {
+    "start": "node --import tsx --env-file-if-exists=.env server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@getdial/sdk": "^0.17.0",
+    "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
