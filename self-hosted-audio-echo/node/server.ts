@@ -53,10 +53,14 @@ wss.on("connection", (ws: WebSocket, req) => {
     } catch {
       return; // a malformed frame must not kill the call
     }
+    // Print every control frame as it arrives (call_connected, dtmf, mark,
+    // duration_warning, call_ended) so call events are visible while debugging.
+    // Skip `media` (the ~50/s audio stream) and `ping_pong` (2s keepalive) —
+    // both would drown out the events worth seeing.
+    if (msg.type !== "media" && msg.type !== "ping_pong") {
+      console.log(`call ${callId}:`, JSON.stringify(msg));
+    }
     switch (msg.type) {
-      case "call_connected":
-        console.log(`call ${msg.call_id} (${msg.direction})${msg.reconnect ? " [reconnect]" : ""}`);
-        break;
       case "media":
         // Echo: send the same audio back. A real agent would decode
         // Buffer.from(msg.payload, "base64"), run its stack, and re-encode.
@@ -67,9 +71,6 @@ wss.on("connection", (ws: WebSocket, req) => {
         break;
       case "ping_pong":
         send({ type: "ping_pong", timestamp: msg.timestamp });
-        break;
-      case "call_ended":
-        console.log(`call ended: ${msg.reason}`);
         break;
     }
   });
