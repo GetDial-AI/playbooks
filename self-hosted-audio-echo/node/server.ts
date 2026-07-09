@@ -37,6 +37,15 @@ wss.on("connection", (ws: WebSocket, req) => {
     return;
   }
 
+  // ws.send is fire-and-forget; its optional callback is the only place a send
+  // failure surfaces (socket closing mid-call, write backpressure). Log it so a
+  // dropped frame shows up instead of becoming a silent gap in the audio.
+  const send = (frame: Parameters<typeof serializeServerAudioMessage>[0]) => {
+    ws.send(serializeServerAudioMessage(frame), (err) => {
+      if (err) console.error(`call ${callId}: failed to send ${frame.type}: ${err.message}`);
+    });
+  };
+
   ws.on("message", (data: Buffer) => {
     let msg;
     try {
@@ -51,13 +60,13 @@ wss.on("connection", (ws: WebSocket, req) => {
       case "media":
         // Echo: send the same audio back. A real agent would decode
         // Buffer.from(msg.payload, "base64"), run its stack, and re-encode.
-        ws.send(serializeServerAudioMessage({ type: "media", payload: msg.payload }));
+        send({ type: "media", payload: msg.payload });
         break;
       case "dtmf":
-        if (msg.digit === "#") ws.send(serializeServerAudioMessage({ type: "end_call" }));
+        if (msg.digit === "#") send({ type: "end_call" });
         break;
       case "ping_pong":
-        ws.send(serializeServerAudioMessage({ type: "ping_pong", timestamp: msg.timestamp }));
+        send({ type: "ping_pong", timestamp: msg.timestamp });
         break;
       case "call_ended":
         console.log(`call ended: ${msg.reason}`);
