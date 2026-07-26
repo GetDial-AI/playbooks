@@ -125,8 +125,34 @@ async function trackCall(id, statusEl) {
 
 // ---------------- websocket live feed --------------------------------------
 let firstReal = true;
+const seenEventKeys = new Set();
+const seenEventOrder = [];
+const MAX_SEEN_EVENTS = 1000;
+
+function eventKey(ev) {
+  if (!ev || typeof ev !== "object") return null;
+  if (ev.id != null) return `id:${ev.id}`;
+  // Dial events normally have an id. Keep a deterministic fallback so events
+  // from older SDK versions are still deduplicated when history is replayed.
+  try { return `event:${JSON.stringify(ev)}`; } catch { return null; }
+}
+
+function isDuplicateEvent(ev) {
+  const key = eventKey(ev);
+  if (key == null) return false;
+  if (seenEventKeys.has(key)) return true;
+
+  seenEventKeys.add(key);
+  seenEventOrder.push(key);
+  if (seenEventOrder.length > MAX_SEEN_EVENTS) {
+    seenEventKeys.delete(seenEventOrder.shift());
+  }
+  return false;
+}
+
 function renderEvent(ev, prepend = true) {
   if (!ev || !ev.type || ev.type.startsWith("_")) return;
+  if (isDuplicateEvent(ev)) return;
   if (firstReal) { feed.innerHTML = ""; firstReal = false; }
 
   const d = ev.data || {};
@@ -178,7 +204,10 @@ function connectWS() {
       setWs(ev.data && ev.data.connected ? "live" : "down");
       return;
     }
-    renderEvent(ev, msg.kind === "live");
+    // Newest-first feed: prepend both history and live. Server replays history
+    // oldest→newest, so prepending each in turn leaves the newest on top —
+    // consistent with where incoming live events land.
+    renderEvent(ev, true);
   };
 }
 
