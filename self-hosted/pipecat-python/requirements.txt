@@ -1,0 +1,4 @@
+pipecat-ai[cartesia,deepgram,openai,silero,websocket]>=1.10.0
+dial-sdk>=0.26.0
+uvicorn>=0.32.0
+python-dotenv>=1.0.0
