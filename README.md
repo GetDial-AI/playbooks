@@ -24,14 +24,20 @@ Send and receive SMS, and place AI-driven voice calls with the Dial SDK.
 
 ### Self-Hosted
 
-Bring your own LLM over a WebSocket — see the
-[Self-Hosted docs](https://docs.getdial.ai/documentation/platform/self-hosted) and the
-[protocol reference](https://docs.getdial.ai/api-reference/self-hosted-protocol).
+Bring your own agent over a WebSocket — see the
+[Self-Hosted docs](https://docs.getdial.ai/documentation/platform/self-hosted). It comes in two
+variants: **LLM**, where Dial still runs speech and turn-taking and asks your server what to say
+([protocol](https://docs.getdial.ai/api-reference/self-hosted-protocol)), and **audio**, where Dial
+pipes the raw call audio to you and your stack does the rest
+([protocol](https://docs.getdial.ai/api-reference/self-hosted-audio-protocol)).
 
 | Playbook | Language | What it shows |
 |---|---|---|
-| [`self-hosted/openai-node`](./self-hosted/openai-node) | Node.js | Driving calls with the OpenAI SDK, focused on transcript interrupts |
+| [`self-hosted/openai-node`](./self-hosted/openai-node) | Node.js | LLM variant — driving calls with the OpenAI SDK, focused on transcript interrupts |
 | [`self-hosted/openai-python`](./self-hosted/openai-python) | Python | The same, in Python — driving calls with the OpenAI SDK over the `dial-sdk` protocol types, focused on transcript interrupts |
+| [`self-hosted/pipecat-python`](./self-hosted/pipecat-python) | Python ([Pipecat](https://pipecat.ai)) | Audio variant — running a Pipecat voice pipeline on a call: the Dial audio protocol as a Pipecat `FrameSerializer`, plus barge-in, keepalive, and format negotiation |
+| [`self-hosted-audio-echo/node`](./self-hosted-audio-echo/node) | Node.js | Audio variant, smallest possible server — echoes the caller's audio straight back |
+| [`self-hosted-audio-echo/python`](./self-hosted-audio-echo/python) | Python | The same, in Python |
 
 ### AI Agent
 
