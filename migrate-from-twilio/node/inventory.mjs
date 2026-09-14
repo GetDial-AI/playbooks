@@ -497,8 +497,8 @@ function analyze({ numbers, shortCodes, usage, messagingServices }) {
   if (campaigns.length) {
     decisions.push(
       `${campaigns.length} A2P 10DLC campaign(s) registered on Twilio. Registrations belong to the account that ` +
-        `filed them and do not transfer — Dial handles registration for numbers on Dial. Keep the Twilio campaign ` +
-        `alive until cutover is finished.`,
+        `filed them and do not transfer — you re-register on Dial. Keep the Twilio campaign alive until cutover ` +
+        `is finished.`,
     );
   }
 
