@@ -20,7 +20,7 @@
  *     file that creates, updates, or deletes anything in a Twilio account.
  *
  * Usage:
- *   node inventory.mjs [--per-number] [--no-csv] [--out FILE]
+ *   node inventory.mjs [--account SID] [--per-number] [--no-csv] [--out FILE]
  */
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -67,18 +67,20 @@ const USAGE_CATEGORIES = [
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const opts = { perNumber: false, out: "twilio-inventory.json", maxScan: 50000, csv: true };
+  const opts = { perNumber: false, out: "twilio-inventory.json", maxScan: 50000, csv: true, account: null };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--per-number") opts.perNumber = true;
     else if (arg === "--no-csv") opts.csv = false;
     else if (arg === "--out") opts.out = argv[++i];
     else if (arg === "--max-scan") opts.maxScan = Number(argv[++i]);
+    else if (arg === "--account") opts.account = argv[++i];
     else if (arg === "--help" || arg === "-h") {
       console.log(`Twilio → Dial migration inventory (read-only)
 
   --per-number    Also count messages/calls per number (slow; see README)
   --max-scan N    Cap records scanned by --per-number (default 50000)
+  --account SID   Inventory a subaccount; keep your own credentials in .env
   --out FILE      Output path (default twilio-inventory.json)
   --no-csv        Skip the CSV; write only the JSON
 `);
@@ -658,46 +660,69 @@ async function main() {
   const { accountSid, auth } = credentials();
   AUTH_HEADER = auth;
 
+  // Subaccount resources are read with the *parent's* credentials and the
+  // subaccount in the URL — a subaccount SID in the auth header is a 401. So the
+  // account being read is tracked separately from the one doing the reading.
+  const targetSid = opts.account || accountSid;
+  const crossAccount = targetSid !== accountSid;
+  if (opts.account && !/^AC[0-9a-f]{32}$/i.test(opts.account)) {
+    console.error(`--account should look like AC… — got "${opts.account}"`);
+    process.exit(1);
+  }
+
   const step = (msg) => process.stderr.write(`  … ${msg}\n`);
 
   step("account");
-  const account = await fetchAccount(accountSid);
+  const account = await fetchAccount(targetSid);
 
   // Everything time-bounded below starts the day the account was created, so a
   // migration sees the full history rather than a window someone had to pick.
   const since = toStartDate(account.dateCreated);
 
-  step("subaccounts");
-  const subaccounts = await fetchSubaccounts(accountSid);
+  // `Accounts` is scoped by the credentials, not the URL, so asking for it
+  // while targeting a subaccount returns the *parent's* whole list. Twilio
+  // subaccounts cannot themselves have subaccounts, so the answer is none.
+  let subaccounts = [];
+  if (!crossAccount) {
+    step("subaccounts");
+    subaccounts = await fetchSubaccounts(targetSid);
+  }
 
   step("phone numbers");
-  const numbers = await fetchNumbers(accountSid);
+  const numbers = await fetchNumbers(targetSid);
 
   step("short codes");
-  const shortCodes = await fetchShortCodes(accountSid);
+  const shortCodes = await fetchShortCodes(targetSid);
 
   // Parent-only, so the traffic matches the numbers listed above it.
   step(`usage (since ${since})`);
-  const usage = await fetchUsage(accountSid, since, false);
+  const usage = await fetchUsage(targetSid, since, false);
 
   // The rollup is the account's true footprint, and is what the Twilio console
   // shows. Only worth a second pass when there are subaccounts to roll up.
   let usageWithSubaccounts = null;
   if (subaccounts.length) {
     step(`usage including ${subaccounts.length} subaccount(s)`);
-    usageWithSubaccounts = await fetchUsage(accountSid, since, true);
+    usageWithSubaccounts = await fetchUsage(targetSid, since, true);
   }
 
-  step("messaging services & 10DLC campaigns");
-  const messagingServices = await fetchMessagingServices(accountSid);
+  // These two live on the authenticating account, not the one in the URL, so
+  // they cannot be read per subaccount with the parent's credentials. Skipped
+  // rather than reported as the subaccount's, which would be wrong.
+  let messagingServices = [];
+  let brands = [];
+  if (!crossAccount) {
+    step("messaging services & 10DLC campaigns");
+    messagingServices = await fetchMessagingServices(targetSid);
 
-  step("10DLC brands");
-  const brands = await fetchBrands();
+    step("10DLC brands");
+    brands = await fetchBrands();
+  }
 
   let perNumber = null;
   if (opts.perNumber) {
     step(`per-number traffic (scanning up to ${opts.maxScan} records each)`);
-    perNumber = await fetchPerNumber(accountSid, since, opts.maxScan);
+    perNumber = await fetchPerNumber(targetSid, since, opts.maxScan);
   }
 
   const inventory = {
@@ -705,6 +730,8 @@ async function main() {
     generatedBy: "dial playbooks/migrate-from-twilio/node",
     since,
     account,
+    readWithCredentialsOf: accountSid,
+    messagingAndBrandsCollected: !crossAccount,
     subaccounts,
     numbers,
     shortCodes,

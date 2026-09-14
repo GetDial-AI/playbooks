@@ -1,5 +1,7 @@
 # Twilio → Dial migration inventory
 
+> **Just need to run it?** See [QUICKSTART.md](./QUICKSTART.md) — four steps, about a minute.
+
 Takes stock of a Twilio account before a migration: every number and what it can do, how
 it's wired today, how much traffic actually flows through it, and the 10DLC registrations
 behind that traffic.
@@ -49,6 +51,7 @@ node inventory.mjs
 
 ```bash
 node inventory.mjs --per-number      # attribute traffic to individual numbers (slow)
+node inventory.mjs --account AC123…  # inventory a subaccount (see below)
 node inventory.mjs --out inv.json    # output path
 node inventory.mjs --no-csv          # JSON only, skip the spreadsheet
 ```
@@ -105,9 +108,15 @@ The terminal prints the first and, when subaccounts carry traffic of their own, 
 with the difference broken out. Every row in the usage CSVs carries a `scope` column, so the
 two can't be added together by accident.
 
-To inventory the **numbers** on a subaccount, run the script again with that subaccount's SID
-— numbers live on the subaccount that owns them. Use the `this-account` figures when you do,
-or you'll count the same traffic once per run.
+To inventory the **numbers** on a subaccount, run the script again with `--account <SID>`,
+leaving `.env` alone: subaccount resources are read with the *parent's* credentials and the
+subaccount in the URL, and a subaccount SID in the auth header is a `401`. Use the
+`this-account` figures when you do, or you'll count the same traffic once per run.
+
+Two things are deliberately left out of a `--account` run, because Twilio scopes them to the
+credentials rather than the URL and reporting the parent's as the subaccount's would be wrong:
+**Messaging Services** and **10DLC brands**. The JSON records this as
+`messagingAndBrandsCollected: false`.
 
 ## Reading the output
 
