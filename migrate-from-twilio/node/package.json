@@ -1,0 +1,13 @@
+{
+  "name": "dial-migrate-from-twilio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only inventory of a Twilio account, for planning a migration to Dial.",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env inventory.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
