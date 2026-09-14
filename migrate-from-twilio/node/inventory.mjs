@@ -16,7 +16,7 @@
  *     file that creates, updates, or deletes anything in a Twilio account.
  *
  * Usage:
- *   node inventory.mjs [--months 12] [--redact] [--per-number] [--out FILE]
+ *   node inventory.mjs [--redact] [--per-number] [--out FILE]
  */
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -73,18 +73,16 @@ const USAGE_CATEGORIES = [
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const opts = { months: 12, redact: false, perNumber: false, out: "twilio-inventory.json", maxScan: 50000 };
+  const opts = { redact: false, perNumber: false, out: "twilio-inventory.json", maxScan: 50000 };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--redact") opts.redact = true;
     else if (arg === "--per-number") opts.perNumber = true;
-    else if (arg === "--months") opts.months = Number(argv[++i]);
     else if (arg === "--out") opts.out = argv[++i];
     else if (arg === "--max-scan") opts.maxScan = Number(argv[++i]);
     else if (arg === "--help" || arg === "-h") {
       console.log(`Twilio → Dial migration inventory (read-only)
 
-  --months N      How many months of usage history to pull (default 12)
   --redact        Mask phone numbers in the output; keep counts and capabilities
   --per-number    Also count messages/calls per number (slow; see README)
   --max-scan N    Cap records scanned by --per-number (default 50000)
@@ -95,10 +93,6 @@ function parseArgs(argv) {
       console.error(`Unknown argument: ${arg}`);
       process.exit(1);
     }
-  }
-  if (!Number.isFinite(opts.months) || opts.months < 1) {
-    console.error("--months must be a positive number");
-    process.exit(1);
   }
   return opts;
 }
@@ -186,11 +180,21 @@ async function twilioList(url, resourceKey, { limit = Infinity, tolerate404 = fa
 
 const A = (sid) => `https://api.twilio.com/2010-04-01/Accounts/${sid}`;
 
-function monthsAgo(n) {
-  const d = new Date();
-  d.setUTCMonth(d.getUTCMonth() - n);
-  d.setUTCDate(1);
-  return d.toISOString().slice(0, 10);
+/**
+ * The usage window always starts at the account's creation date — a migration
+ * wants the whole history, not a trailing window, and Twilio dates the account
+ * for us. Twilio returns RFC-2822 ("Tue, 18 Aug 2020 20:04:00 +0000"); the
+ * Usage API wants YYYY-MM-DD.
+ */
+function toStartDate(twilioDate) {
+  const parsed = new Date(twilioDate);
+  if (Number.isNaN(parsed.getTime())) {
+    // Never seen in practice, but a bad date shouldn't lose the whole run —
+    // 2008 predates Twilio itself, so it can only over-collect.
+    return "2008-01-01";
+  }
+  parsed.setUTCDate(1);
+  return parsed.toISOString().slice(0, 10);
 }
 
 /** Mask a number for sharing before a contract is signed: +1415555**** */
@@ -274,8 +278,7 @@ async function fetchShortCodes(sid, redact) {
   }));
 }
 
-async function fetchUsage(sid, months) {
-  const startDate = monthsAgo(months);
+async function fetchUsage(sid, startDate) {
   const byCategory = {};
 
   for (const category of USAGE_CATEGORIES) {
@@ -371,8 +374,7 @@ async function fetchBrands() {
  * Calls lists. That is slow and rate-limited on a busy account, which is why
  * it is opt-in and capped.
  */
-async function fetchPerNumber(sid, months, maxScan, redact) {
-  const since = monthsAgo(months);
+async function fetchPerNumber(sid, since, maxScan, redact) {
   const counts = new Map();
   /** Get (or create) the tally row for a number, so callers can just increment. */
   const rowFor = (num) => {
@@ -567,7 +569,9 @@ function printSummary(inv) {
   line();
 
   const observed = Math.max(0, ...USAGE_CATEGORIES.map((c) => usage.totals[c]?.monthsObserved || 0));
-  line(`  Usage since ${usage.since}  (${observed} month${observed === 1 ? "" : "s"} with activity)`);
+  line(
+    `  Usage — full history since ${usage.since}  (${observed} month${observed === 1 ? "" : "s"} with activity)`,
+  );
   for (const c of USAGE_CATEGORIES) {
     const t = usage.totals[c];
     if (!t || (!t.totalCount && !t.totalUsage)) continue;
@@ -616,6 +620,10 @@ async function main() {
   step("account");
   const account = await fetchAccount(accountSid);
 
+  // Everything time-bounded below starts the day the account was created, so a
+  // migration sees the full history rather than a window someone had to pick.
+  const since = toStartDate(account.dateCreated);
+
   step("subaccounts");
   const subaccounts = await fetchSubaccounts(accountSid);
 
@@ -625,8 +633,8 @@ async function main() {
   step("short codes");
   const shortCodes = await fetchShortCodes(accountSid, opts.redact);
 
-  step(`usage (${opts.months} months)`);
-  const usage = await fetchUsage(accountSid, opts.months);
+  step(`usage (since ${since})`);
+  const usage = await fetchUsage(accountSid, since);
 
   step("messaging services & 10DLC campaigns");
   const messagingServices = await fetchMessagingServices(accountSid);
@@ -637,7 +645,7 @@ async function main() {
   let perNumber = null;
   if (opts.perNumber) {
     step(`per-number traffic (scanning up to ${opts.maxScan} records each)`);
-    perNumber = await fetchPerNumber(accountSid, opts.months, opts.maxScan, opts.redact);
+    perNumber = await fetchPerNumber(accountSid, since, opts.maxScan, opts.redact);
   }
 
   const analysis = analyze({ numbers, shortCodes, usage, messagingServices });
@@ -647,7 +655,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     generatedBy: "dial playbooks/migrate-from-twilio/node",
     redacted: opts.redact,
-    windowMonths: opts.months,
+    since,
     account,
     subaccounts,
     numbers,

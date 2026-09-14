@@ -14,7 +14,7 @@ Output is a single `twilio-inventory.json` plus a summary printed to your termin
 | Subaccounts | `Accounts` — flagged so none get missed |
 | Phone numbers | `IncomingPhoneNumbers` — capabilities, TwiML URLs, webhooks, trunk, Messaging Service |
 | Short codes | `SMS/ShortCodes` |
-| Traffic | `Usage/Records/Monthly` — SMS, MMS and calls, inbound and outbound, by month |
+| Traffic | `Usage/Records/Monthly` — SMS, MMS and calls, inbound and outbound, by month, from day one |
 | Messaging Services | `Services` and their inbound webhooks |
 | 10DLC | `a2p/BrandRegistrations` and each service's `Compliance/Usa2p` campaign |
 
@@ -44,11 +44,14 @@ node inventory.mjs
 ## Options
 
 ```bash
-node inventory.mjs --months 6        # usage window (default 12)
 node inventory.mjs --redact          # mask phone numbers, keep counts and capabilities
 node inventory.mjs --per-number      # attribute traffic to individual numbers (slow)
 node inventory.mjs --out inv.json    # output path
 ```
+
+There's no time-window flag: usage always covers the account's **full history**, starting
+from the month it was created. A migration wants the whole picture, and Twilio dates the
+account for us, so there's nothing to pick.
 
 **`--redact`** masks the last four digits of every number and drops friendly names. Use it when
 sharing the inventory before a contract is in place — the counts, capabilities and volumes that a
@@ -56,8 +59,9 @@ quote is built from all survive.
 
 **`--per-number`** walks the Messages and Calls lists to attribute volume to individual numbers.
 Twilio's Usage API reports account totals only, so this is the only way to get a per-number
-breakdown — and on a busy account it's slow and rate-limited. It's capped at 50,000 records per
-resource (`--max-scan`); the output sets `perNumber.truncated` when it hits the cap.
+breakdown — and on a busy account it's slow and rate-limited. Since the window is the account's
+whole life, it's capped at 50,000 records per resource (`--max-scan`); the output sets
+`perNumber.truncated` when it hits the cap, and the account-level totals stay exact either way.
 
 ## Subaccounts
 
