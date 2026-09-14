@@ -50,8 +50,7 @@ Drive Dial from a [LangChain](https://www.langchain.com/) agent using the
 
 ### Migrating to Dial
 
-Take stock of an existing provider before moving to Dial — see the
-[migration guides](https://docs.getdial.ai/documentation/migrate/overview).
+Take stock of an existing provider before moving to Dial.
 
 | Playbook | Language | What it shows |
 |---|---|---|

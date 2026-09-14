@@ -126,8 +126,6 @@ average monthly volume per category over the account's full history.
 
 ## Next
 
-Send the output — the JSON, the CSV, or both — to your Dial contact.
-
-For what the data means for a migration — what moves cleanly, what changes shape, and what
-Dial doesn't do — see the
-[Migrate from Twilio](https://docs.getdial.ai/documentation/migrate/twilio) guide.
+Send the output — the JSON, the CSV, or both — to your Dial contact, who'll work through
+what it means for your migration: what moves cleanly, what changes shape, and what Dial
+doesn't do.
