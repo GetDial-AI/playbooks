@@ -57,17 +57,6 @@ identifiers, so treat them like any other export from your Twilio console.
 
 ---
 
-**Using subaccounts?** The summary says how many you have, and the numbers on them aren't in
-the first run. Keep `.env` exactly as it is — your own credentials — and point the script at
-each subaccount in turn:
-
-```bash
-node inventory.mjs --account AC<subaccount-sid> --out subaccount-1.json
-```
-
-Send those files too. If you have a lot of subaccounts, ask your Dial contact how many
-they need before working through all of them.
-
 Something not working, or the account is too large to finish? Tell your Dial contact what you
 saw — don't spend time on it.
 
