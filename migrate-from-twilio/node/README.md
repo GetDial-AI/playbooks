@@ -18,7 +18,7 @@ and a summary printed to your terminal.
 | Subaccounts | `Accounts` — flagged so none get missed |
 | Phone numbers | `IncomingPhoneNumbers` — capabilities, TwiML URLs, webhooks, trunk, Messaging Service |
 | Short codes | `SMS/ShortCodes` |
-| Traffic | `Usage/Records/Monthly` — SMS, MMS and calls, inbound and outbound, by month, from day one |
+| Traffic | `Usage/Records/Monthly` — SMS, MMS and calls, inbound and outbound, by month, from day one, in both scopes (see below) |
 | Messaging Services | `Services` and their inbound webhooks |
 | 10DLC | `a2p/BrandRegistrations` and each service's `Compliance/Usa2p` campaign |
 
@@ -91,8 +91,27 @@ Two details that matter when these land in Excel:
 
 ## Subaccounts
 
-The script scans **one account**. If it reports subaccounts, run it once per subaccount SID —
-numbers and traffic live on the subaccount that owns them, not on the parent.
+Twilio is inconsistent here, and it's the easiest number on the whole report to misread.
+
+`IncomingPhoneNumbers`, `Calls` and `Messages` return **only the account you queried**. The
+Usage API is the opposite: it defaults to `IncludeSubaccounts=true`, so a parent account's
+usage silently includes every subaccount's traffic. Left alone, that reports numbers for one
+account and traffic for hundreds.
+
+So usage is collected **twice**, with the scope always sent explicitly:
+
+| Scope | Meaning |
+|---|---|
+| `this-account` | Only the account you queried — matches the numbers in the same report |
+| `with-subaccounts` | The parent plus every subaccount, which is what the Twilio console shows |
+
+The terminal prints the first and, when subaccounts carry traffic of their own, the second
+with the difference broken out. Every row in the usage CSVs carries a `scope` column, so the
+two can't be added together by accident.
+
+To inventory the **numbers** on a subaccount, run the script again with that subaccount's SID
+— numbers live on the subaccount that owns them. Use the `this-account` figures when you do,
+or you'll count the same traffic once per run.
 
 ## Reading the output
 

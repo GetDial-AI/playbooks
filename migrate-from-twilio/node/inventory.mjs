@@ -274,12 +274,24 @@ async function fetchShortCodes(sid, redact) {
   }));
 }
 
-async function fetchUsage(sid, startDate) {
+/**
+ * Usage for one scope.
+ *
+ * Twilio's Usage API defaults to `IncludeSubaccounts=true`, so a parent
+ * account's usage silently contains every subaccount's traffic — while
+ * IncomingPhoneNumbers, Calls and Messages on the same account are parent-only.
+ * Left at the default, the inventory reports numbers for one account and
+ * traffic for hundreds, and running it per subaccount then double-counts.
+ * So the parameter is always sent explicitly, and both scopes are collected
+ * when subaccounts exist.
+ */
+async function fetchUsage(sid, startDate, includeSubaccounts) {
   const byCategory = {};
 
   for (const category of USAGE_CATEGORIES) {
     const rows = await twilioList(
-      `${A(sid)}/Usage/Records/Monthly.json?Category=${category}&StartDate=${startDate}&PageSize=1000`,
+      `${A(sid)}/Usage/Records/Monthly.json?Category=${category}&StartDate=${startDate}` +
+        `&IncludeSubaccounts=${includeSubaccounts ? "true" : "false"}&PageSize=1000`,
       "usage_records",
     );
     byCategory[category] = rows.map((r) => ({
@@ -311,7 +323,7 @@ async function fetchUsage(sid, startDate) {
     };
   }
 
-  return { since: startDate, monthly: byCategory, totals };
+  return { since: startDate, includesSubaccounts: includeSubaccounts, monthly: byCategory, totals };
 }
 
 async function fetchMessagingServices(sid) {
@@ -494,24 +506,38 @@ function writeCsvs(inv, outPath) {
 
   // Long format (one row per month per category) rather than a pivot: it is
   // what a spreadsheet wants to pivot *from*.
+  // Every usage row carries its scope, so the two can never be added together
+  // by accident in a spreadsheet.
+  const scopes = [["this-account", inv.usage]];
+  if (inv.usageWithSubaccounts) scopes.push(["with-subaccounts", inv.usageWithSubaccounts]);
+
   const usageRows = [];
-  for (const [category, months] of Object.entries(inv.usage.monthly)) {
-    for (const m of months) {
-      usageRows.push([m.month, category, m.count, m.usage, m.usageUnit, m.price, m.priceUnit]);
+  for (const [scope, u] of scopes) {
+    for (const [category, months] of Object.entries(u.monthly)) {
+      for (const m of months) {
+        usageRows.push([scope, m.month, category, m.count, m.usage, m.usageUnit, m.price, m.priceUnit]);
+      }
     }
   }
-  usageRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
-  write("usage", ["month", "category", "count", "usage", "usage_unit", "price", "price_unit"], usageRows);
+  usageRows.sort(
+    (a, b) =>
+      String(a[0]).localeCompare(String(b[0])) ||
+      String(a[1]).localeCompare(String(b[1])) ||
+      String(a[2]).localeCompare(String(b[2])),
+  );
+  write("usage", ["scope", "month", "category", "count", "usage", "usage_unit", "price", "price_unit"], usageRows);
 
   write(
     "usage-totals",
-    ["category", "months_observed", "total_count", "total_usage", "usage_unit", "total_price", "avg_monthly_count", "avg_monthly_usage"],
-    Object.entries(inv.usage.totals)
-      .filter(([, t]) => t.totalCount || t.totalUsage)
-      .map(([category, t]) => [
-        category, t.monthsObserved, t.totalCount, t.totalUsage, t.usageUnit,
-        t.totalPrice, t.avgMonthlyCount, t.avgMonthlyUsage,
-      ]),
+    ["scope", "category", "months_observed", "total_count", "total_usage", "usage_unit", "total_price", "avg_monthly_count", "avg_monthly_usage"],
+    scopes.flatMap(([scope, u]) =>
+      Object.entries(u.totals)
+        .filter(([, t]) => t.totalCount || t.totalUsage)
+        .map(([category, t]) => [
+          scope, category, t.monthsObserved, t.totalCount, t.totalUsage, t.usageUnit,
+          t.totalPrice, t.avgMonthlyCount, t.avgMonthlyUsage,
+        ]),
+    ),
   );
 
   write(
@@ -562,7 +588,8 @@ function printSummary(inv) {
 
   const observed = Math.max(0, ...USAGE_CATEGORIES.map((c) => usage.totals[c]?.monthsObserved || 0));
   line(
-    `  Usage — full history since ${usage.since}  (${observed} month${observed === 1 ? "" : "s"} with activity)`,
+    `  Usage — this account only, full history since ${usage.since}` +
+      `  (${observed} month${observed === 1 ? "" : "s"} with activity)`,
   );
   for (const c of USAGE_CATEGORIES) {
     const t = usage.totals[c];
@@ -575,6 +602,30 @@ function printSummary(inv) {
     );
   }
   line();
+
+  // Only worth showing when subaccounts actually carry traffic of their own.
+  const roll = inv.usageWithSubaccounts;
+  if (roll) {
+    const differs = USAGE_CATEGORIES.some(
+      (c) => (roll.totals[c]?.totalCount || 0) !== (usage.totals[c]?.totalCount || 0),
+    );
+    if (differs) {
+      line(`  Including all ${inv.subaccounts.length} subaccounts`);
+      for (const c of USAGE_CATEGORIES) {
+        const t = roll.totals[c];
+        const own = usage.totals[c]?.totalCount || 0;
+        if (!t || (!t.totalCount && !t.totalUsage)) continue;
+        const unit = t.usageUnit ? ` ${t.usageUnit}` : "";
+        line(
+          `    ${c.padEnd(16)} ${String(t.totalCount).padStart(9)} total  ·  ` +
+            `${String(t.totalCount - own).padStart(8)} from subaccounts  ·  ${t.totalUsage}${unit}`,
+        );
+      }
+    } else {
+      line("  Subaccounts carry no traffic of their own.");
+    }
+    line();
+  }
 
   line("─".repeat(72));
   line();
@@ -605,8 +656,17 @@ async function main() {
   step("short codes");
   const shortCodes = await fetchShortCodes(accountSid, opts.redact);
 
+  // Parent-only, so the traffic matches the numbers listed above it.
   step(`usage (since ${since})`);
-  const usage = await fetchUsage(accountSid, since);
+  const usage = await fetchUsage(accountSid, since, false);
+
+  // The rollup is the account's true footprint, and is what the Twilio console
+  // shows. Only worth a second pass when there are subaccounts to roll up.
+  let usageWithSubaccounts = null;
+  if (subaccounts.length) {
+    step(`usage including ${subaccounts.length} subaccount(s)`);
+    usageWithSubaccounts = await fetchUsage(accountSid, since, true);
+  }
 
   step("messaging services & 10DLC campaigns");
   const messagingServices = await fetchMessagingServices(accountSid);
@@ -630,6 +690,7 @@ async function main() {
     numbers,
     shortCodes,
     usage,
+    usageWithSubaccounts,
     messagingServices,
     brands,
     perNumber,
