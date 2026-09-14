@@ -48,6 +48,14 @@ Drive Dial from a [LangChain](https://www.langchain.com/) agent using the
 |---|---|---|
 | [`ai-agent/python-langchain`](./ai-agent/python-langchain) | Python (LangChain) | A tool-calling agent over the `dial-langchain` tools — a fake offline LLM or a real OpenAI/OpenRouter model via `.env` — plus a dashboard for SMS, AI voice calls, inbox, and transcripts |
 
+### Migrating to Dial
+
+Take stock of an existing provider before moving to Dial.
+
+| Playbook | Language | What it shows |
+|---|---|---|
+| [`migrate-from-twilio/node`](./migrate-from-twilio/node) | Node.js | Read-only inventory of a Twilio account — numbers and capabilities, how they're wired, SMS/call volume, 10DLC registrations — as one JSON file and one spreadsheet-ready CSV |
+
 ## Running a playbook
 
 Each directory is standalone, with its own README and setup steps. The general shape:
