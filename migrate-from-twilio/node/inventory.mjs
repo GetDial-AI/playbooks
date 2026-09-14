@@ -82,7 +82,7 @@ function parseArgs(argv) {
   --per-number    Also count messages/calls per number (slow; see README)
   --max-scan N    Cap records scanned by --per-number (default 50000)
   --out FILE      Output path (default twilio-inventory.json)
-  --no-csv        Skip the CSV sheets; write only the JSON
+  --no-csv        Skip the CSV; write only the JSON
 `);
       process.exit(0);
     } else {
@@ -466,31 +466,38 @@ function csvCell(value) {
   return s;
 }
 
-function toCsv(headers, rows) {
-  const lines = [headers.map(csvCell).join(",")];
-  for (const row of rows) lines.push(row.map(csvCell).join(","));
-  // BOM so Excel reads it as UTF-8, CRLF because Excel is happiest with it.
-  return "﻿" + lines.join("\r\n") + "\r\n";
-}
-
 /**
- * The inventory is several tables, not one, so it becomes several sheets —
- * flattening them into a single CSV would either lose columns or invent blank
- * ones. Named off the JSON output path so a run's files sort together.
+ * Everything in one sheet.
+ *
+ * The inventory is several tables of different shapes, so they are stacked as
+ * titled sections rather than forced into one set of columns — a union of every
+ * column would leave most cells blank on most rows and read worse. Excel and
+ * Sheets both open a stacked CSV fine; each section has its own header row and
+ * a blank line before the next.
  */
-function writeCsvs(inv, outPath) {
-  const base = outPath.replace(/\.json$/i, "");
-  const written = [];
-
-  const write = (suffix, headers, rows) => {
+function buildCsv(inv) {
+  const sections = [];
+  const section = (title, headers, rows) => {
     if (!rows.length) return;
-    const path = `${base}.${suffix}.csv`;
-    writeFileSync(path, toCsv(headers, rows));
-    written.push(path);
+    sections.push({ title, headers, rows });
   };
 
-  write(
-    "numbers",
+  section("ACCOUNT", ["field", "value"], [
+    ["account_sid", inv.account.sid],
+    ["friendly_name", inv.account.friendlyName],
+    ["type", inv.account.type],
+    ["status", inv.account.status],
+    ["date_created", inv.account.dateCreated],
+    ["usage_since", inv.since],
+    ["subaccounts", inv.subaccounts.length],
+    ["numbers", inv.numbers.length],
+    ["short_codes", inv.shortCodes.length],
+    ["redacted", inv.redacted],
+    ["generated_at", inv.generatedAt],
+  ]);
+
+  section(
+    "NUMBERS",
     [
       "number", "country", "friendly_name", "voice", "sms", "mms", "fax",
       "voice_url", "sms_url", "status_callback", "messaging_service_sid",
@@ -504,31 +511,19 @@ function writeCsvs(inv, outPath) {
     ]),
   );
 
-  // Long format (one row per month per category) rather than a pivot: it is
-  // what a spreadsheet wants to pivot *from*.
-  // Every usage row carries its scope, so the two can never be added together
-  // by accident in a spreadsheet.
+  section(
+    "SHORT CODES",
+    ["short_code", "friendly_name", "sms_url", "sid"],
+    inv.shortCodes.map((c) => [c.shortCode, c.friendlyName, c.smsUrl, c.sid]),
+  );
+
+  // Scope matters: `this-account` matches the numbers above, `with-subaccounts`
+  // is the rolled-up figure the Twilio console shows.
   const scopes = [["this-account", inv.usage]];
   if (inv.usageWithSubaccounts) scopes.push(["with-subaccounts", inv.usageWithSubaccounts]);
 
-  const usageRows = [];
-  for (const [scope, u] of scopes) {
-    for (const [category, months] of Object.entries(u.monthly)) {
-      for (const m of months) {
-        usageRows.push([scope, m.month, category, m.count, m.usage, m.usageUnit, m.price, m.priceUnit]);
-      }
-    }
-  }
-  usageRows.sort(
-    (a, b) =>
-      String(a[0]).localeCompare(String(b[0])) ||
-      String(a[1]).localeCompare(String(b[1])) ||
-      String(a[2]).localeCompare(String(b[2])),
-  );
-  write("usage", ["scope", "month", "category", "count", "usage", "usage_unit", "price", "price_unit"], usageRows);
-
-  write(
-    "usage-totals",
+  section(
+    "USAGE TOTALS",
     ["scope", "category", "months_observed", "total_count", "total_usage", "usage_unit", "total_price", "avg_monthly_count", "avg_monthly_usage"],
     scopes.flatMap(([scope, u]) =>
       Object.entries(u.totals)
@@ -540,21 +535,41 @@ function writeCsvs(inv, outPath) {
     ),
   );
 
-  write(
-    "short-codes",
-    ["short_code", "friendly_name", "sms_url", "sid"],
-    inv.shortCodes.map((c) => [c.shortCode, c.friendlyName, c.smsUrl, c.sid]),
+  const byMonth = [];
+  for (const [scope, u] of scopes) {
+    for (const [category, months] of Object.entries(u.monthly)) {
+      for (const m of months) {
+        byMonth.push([scope, m.month, category, m.count, m.usage, m.usageUnit, m.price, m.priceUnit]);
+      }
+    }
+  }
+  byMonth.sort(
+    (a, b) =>
+      String(a[0]).localeCompare(String(b[0])) ||
+      String(a[1]).localeCompare(String(b[1])) ||
+      String(a[2]).localeCompare(String(b[2])),
+  );
+  section("USAGE BY MONTH", ["scope", "month", "category", "count", "usage", "usage_unit", "price", "price_unit"], byMonth);
+
+  section(
+    "MESSAGING SERVICES",
+    ["sid", "friendly_name", "inbound_request_url", "status_callback", "use_inbound_webhook_on_number", "campaign_sid", "campaign_status", "campaign_use_case", "brand_sid"],
+    inv.messagingServices.flatMap((s) => {
+      const base = [s.sid, s.friendlyName, s.inboundRequestUrl, s.statusCallback, s.useInboundWebhookOnNumber];
+      if (!s.campaigns.length) return [[...base, "", "", "", ""]];
+      return s.campaigns.map((c) => [...base, c.sid, c.status, c.useCase, c.brandRegistrationSid]);
+    }),
   );
 
-  write(
-    "subaccounts",
-    ["sid", "friendly_name", "status"],
-    inv.subaccounts.map((s) => [s.sid, s.friendlyName, s.status]),
+  section(
+    "10DLC BRANDS",
+    ["sid", "status", "brand_type", "identity_status", "failure_reason"],
+    inv.brands.map((b) => [b.sid, b.status, b.brandType, b.identityStatus, b.failureReason]),
   );
 
   if (inv.perNumber) {
-    write(
-      "per-number",
+    section(
+      "PER-NUMBER TRAFFIC",
       ["number", "messages_out", "messages_in", "calls_out", "calls_in", "call_minutes"],
       Object.entries(inv.perNumber.numbers).map(([num, r]) => [
         num, r.messagesOut, r.messagesIn, r.callsOut, r.callsIn, r.callMinutes,
@@ -562,7 +577,23 @@ function writeCsvs(inv, outPath) {
     );
   }
 
-  return written;
+  section(
+    "SUBACCOUNTS",
+    ["sid", "friendly_name", "status"],
+    inv.subaccounts.map((s) => [s.sid, s.friendlyName, s.status]),
+  );
+
+  const lines = [];
+  for (const { title, headers, rows } of sections) {
+    if (lines.length) lines.push("");
+    // Bracketed, not "== TITLE ==": a leading = would trip the formula escape
+    // above and land an apostrophe in the file.
+    lines.push(csvCell(`[${title}]`));
+    lines.push(headers.map(csvCell).join(","));
+    for (const row of rows) lines.push(row.map(csvCell).join(","));
+  }
+  // BOM so Excel reads it as UTF-8, CRLF because Excel is happiest with it.
+  return "\ufeff" + lines.join("\r\n") + "\r\n";
 }
 
 // ── Report ─────────────────────────────────────────────────────────────────
@@ -697,11 +728,15 @@ async function main() {
   };
 
   writeFileSync(opts.out, JSON.stringify(inventory, null, 2));
-  const csvs = opts.csv ? writeCsvs(inventory, opts.out) : [];
+  let csvPath = null;
+  if (opts.csv) {
+    csvPath = opts.out.replace(/\.json$/i, "") + ".csv";
+    writeFileSync(csvPath, buildCsv(inventory));
+  }
 
   printSummary(inventory);
   console.log(`  Written to ${opts.out}`);
-  for (const path of csvs) console.log(`             ${path}`);
+  if (csvPath) console.log(`             ${csvPath}`);
   if (!opts.redact) {
     console.log("  Contains real phone numbers — re-run with --redact before sharing externally.\n");
   }

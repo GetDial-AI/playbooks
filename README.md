@@ -55,7 +55,7 @@ Take stock of an existing provider before moving to Dial — see the
 
 | Playbook | Language | What it shows |
 |---|---|---|
-| [`migrate-from-twilio/node`](./migrate-from-twilio/node) | Node.js | Read-only inventory of a Twilio account — numbers and capabilities, how they're wired, SMS/call volume, 10DLC registrations — as JSON and spreadsheet-ready CSVs |
+| [`migrate-from-twilio/node`](./migrate-from-twilio/node) | Node.js | Read-only inventory of a Twilio account — numbers and capabilities, how they're wired, SMS/call volume, 10DLC registrations — as one JSON file and one spreadsheet-ready CSV |
 
 ## Running a playbook
 

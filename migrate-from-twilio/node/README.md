@@ -7,8 +7,8 @@ behind that traffic.
 It **reports, it doesn't advise** — everything in the output is a fact read from Twilio.
 No recommendations, no pricing, no judgement about what should move.
 
-Output is `twilio-inventory.json`, a set of CSVs you can open straight in Excel or Sheets,
-and a summary printed to your terminal.
+Output is two files — `twilio-inventory.json` and `twilio-inventory.csv` — plus a summary
+printed to your terminal.
 
 ## What it reads
 
@@ -48,7 +48,7 @@ node inventory.mjs
 node inventory.mjs --redact          # mask phone numbers, keep counts and capabilities
 node inventory.mjs --per-number      # attribute traffic to individual numbers (slow)
 node inventory.mjs --out inv.json    # output path
-node inventory.mjs --no-csv          # JSON only, skip the spreadsheets
+node inventory.mjs --no-csv          # JSON only, skip the spreadsheet
 ```
 
 There's no time-window flag: usage always covers the account's **full history**, starting
@@ -65,29 +65,27 @@ breakdown — and on a busy account it's slow and rate-limited. Since the window
 whole life, it's capped at 50,000 records per resource (`--max-scan`); the output sets
 `perNumber.truncated` when it hits the cap, and the account-level totals stay exact either way.
 
-## The CSVs
+## The CSV
 
-The inventory is several tables, so it becomes several sheets rather than one flattened file.
-They're named off the JSON path, so a run's files sort together:
+`twilio-inventory.csv` holds everything in one sheet, as titled sections stacked one after
+another — `[ACCOUNT]`, `[NUMBERS]`, `[SHORT CODES]`, `[USAGE TOTALS]`, `[USAGE BY MONTH]`,
+`[MESSAGING SERVICES]`, `[10DLC BRANDS]`, `[SUBACCOUNTS]`, and `[PER-NUMBER TRAFFIC]` with
+`--per-number`. Sections with nothing in them are left out.
 
-| File | One row per |
-|---|---|
-| `…​.numbers.csv` | phone number — capabilities, TwiML/SMS URLs, Messaging Service, trunk |
-| `…​.usage.csv` | month × category — long format, ready to pivot |
-| `…​.usage-totals.csv` | category — totals, averages, and the months observed |
-| `…​.short-codes.csv` | short code (only when the account has any) |
-| `…​.subaccounts.csv` | subaccount (only when the account has any) |
-| `…​.per-number.csv` | number, with `--per-number` |
+They're stacked rather than merged into one set of columns because the tables have different
+shapes: a union of every column would leave most cells blank on most rows and read worse.
+Excel and Sheets both open it fine — each section has its own header row and a blank line
+before the next.
 
-Two details that matter when these land in Excel:
+Two details that matter when this lands in Excel:
 
-- **Numbers stay text.** Excel reads a cell starting with `+`, `=`, `-` or `@` as a formula, which
-  mangles E.164 numbers. Those values are written with a leading apostrophe — Excel's own "treat
-  this as text" marker, invisible in the cell. The same escape defuses
+- **Numbers stay text.** Excel reads a cell starting with `+`, `=`, `-` or `@` as a formula,
+  which mangles E.164 numbers. Those values are written with a leading apostrophe — Excel's
+  own "treat this as text" marker, invisible in the cell. The same escape defuses
   [CSV injection](https://owasp.org/www-community/attacks/CSV_Injection), so a friendly name
   someone typed into Twilio can't execute when you open the sheet.
-- **UTF-8 is declared.** The files carry a byte-order mark, so accented names survive the trip
-  into Excel instead of arriving as mojibake.
+- **UTF-8 is declared.** The file carries a byte-order mark, so accented names survive the
+  trip into Excel instead of arriving as mojibake.
 
 ## Subaccounts
 
