@@ -19,7 +19,35 @@
  *   node inventory.mjs [--months 12] [--redact] [--per-number] [--out FILE]
  */
 
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync } from "node:fs";
+
+/**
+ * Load `.env` next to this script. Node only reads one automatically when it is
+ * started with --env-file, and the documented way to run this is a bare
+ * `node inventory.mjs` — so parse it here rather than making the README carry a
+ * flag. Real environment variables always win, so exporting a value overrides
+ * the file. Deliberately tiny: no dependency is worth adding for this.
+ */
+function loadDotEnv(path = new URL(".env", import.meta.url)) {
+  if (!existsSync(path)) return;
+  for (const raw of readFileSync(path, "utf8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadDotEnv();
 
 // ── Dial list prices, for the cost estimate ────────────────────────────────
 // Published at https://getdial.ai/pricing. These are list rates: volume
