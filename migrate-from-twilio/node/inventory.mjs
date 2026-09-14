@@ -2,10 +2,11 @@
 /**
  * Twilio → Dial migration inventory.
  *
- * Reads a Twilio account and writes a single `twilio-inventory.json` describing
- * everything that has to be accounted for in a migration: the numbers and what
- * they can do, how much traffic actually flows through them, the 10DLC
- * registrations behind that traffic, and the things Dial cannot take as-is.
+ * Reads a Twilio account and writes `twilio-inventory.json` — plus a set of
+ * spreadsheet-ready CSVs — describing everything that has to be accounted for
+ * in a migration: the numbers and what they can do, how much traffic actually
+ * flows through them, the 10DLC registrations behind that traffic, and the
+ * things Dial cannot take as-is.
  *
  * Two properties are deliberate, because the people running this are handing a
  * script their production telecom credentials:
@@ -16,7 +17,7 @@
  *     file that creates, updates, or deletes anything in a Twilio account.
  *
  * Usage:
- *   node inventory.mjs [--redact] [--per-number] [--out FILE]
+ *   node inventory.mjs [--redact] [--per-number] [--no-csv] [--out FILE]
  */
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -73,11 +74,12 @@ const USAGE_CATEGORIES = [
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const opts = { redact: false, perNumber: false, out: "twilio-inventory.json", maxScan: 50000 };
+  const opts = { redact: false, perNumber: false, out: "twilio-inventory.json", maxScan: 50000, csv: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--redact") opts.redact = true;
     else if (arg === "--per-number") opts.perNumber = true;
+    else if (arg === "--no-csv") opts.csv = false;
     else if (arg === "--out") opts.out = argv[++i];
     else if (arg === "--max-scan") opts.maxScan = Number(argv[++i]);
     else if (arg === "--help" || arg === "-h") {
@@ -87,6 +89,7 @@ function parseArgs(argv) {
   --per-number    Also count messages/calls per number (slow; see README)
   --max-scan N    Cap records scanned by --per-number (default 50000)
   --out FILE      Output path (default twilio-inventory.json)
+  --no-csv        Skip the CSV sheets; write only the JSON
 `);
       process.exit(0);
     } else {
@@ -547,6 +550,123 @@ function estimate({ numbers, usage }) {
   };
 }
 
+// ── CSV ────────────────────────────────────────────────────────────────────
+
+/**
+ * One escape handles two problems at once.
+ *
+ * Excel treats a cell starting with `=`, `+`, `-` or `@` as a formula — which
+ * mangles every E.164 number in this file, and, worse, turns a friendly name
+ * someone chose in Twilio into executable content when the sheet is opened
+ * (CSV injection). Prefixing those values with an apostrophe is Excel's own
+ * "this is text" marker: it forces the cell to text, displays nothing, and
+ * defuses the formula. Other readers show a literal apostrophe, which is the
+ * right trade when the stated destination is a spreadsheet.
+ */
+function csvCell(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+
+  let s = String(value);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  if (/[",\r\n]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function toCsv(headers, rows) {
+  const lines = [headers.map(csvCell).join(",")];
+  for (const row of rows) lines.push(row.map(csvCell).join(","));
+  // BOM so Excel reads it as UTF-8, CRLF because Excel is happiest with it.
+  return "﻿" + lines.join("\r\n") + "\r\n";
+}
+
+/**
+ * The inventory is several tables, not one, so it becomes several sheets —
+ * flattening them into a single CSV would either lose columns or invent blank
+ * ones. Named off the JSON output path so a run's files sort together.
+ */
+function writeCsvs(inv, outPath) {
+  const base = outPath.replace(/\.json$/i, "");
+  const written = [];
+
+  const write = (suffix, headers, rows) => {
+    if (!rows.length) return;
+    const path = `${base}.${suffix}.csv`;
+    writeFileSync(path, toCsv(headers, rows));
+    written.push(path);
+  };
+
+  write(
+    "numbers",
+    [
+      "number", "country", "friendly_name", "voice", "sms", "mms", "fax",
+      "voice_url", "sms_url", "status_callback", "messaging_service_sid",
+      "trunk_sid", "emergency_status", "date_created", "sid",
+    ],
+    inv.numbers.map((n) => [
+      n.number, n.country, n.friendlyName,
+      n.capabilities.voice, n.capabilities.sms, n.capabilities.mms, n.capabilities.fax,
+      n.voiceUrl, n.smsUrl, n.statusCallback, n.messagingServiceSid,
+      n.trunkSid, n.emergencyStatus, n.dateCreated, n.sid,
+    ]),
+  );
+
+  // Long format (one row per month per category) rather than a pivot: it is
+  // what a spreadsheet wants to pivot *from*.
+  const usageRows = [];
+  for (const [category, months] of Object.entries(inv.usage.monthly)) {
+    for (const m of months) {
+      usageRows.push([m.month, category, m.count, m.usage, m.usageUnit, m.price, m.priceUnit]);
+    }
+  }
+  usageRows.sort((a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1])));
+  write("usage", ["month", "category", "count", "usage", "usage_unit", "price", "price_unit"], usageRows);
+
+  write(
+    "usage-totals",
+    ["category", "months_observed", "total_count", "total_usage", "usage_unit", "total_price", "avg_monthly_count", "avg_monthly_usage"],
+    Object.entries(inv.usage.totals)
+      .filter(([, t]) => t.totalCount || t.totalUsage)
+      .map(([category, t]) => [
+        category, t.monthsObserved, t.totalCount, t.totalUsage, t.usageUnit,
+        t.totalPrice, t.avgMonthlyCount, t.avgMonthlyUsage,
+      ]),
+  );
+
+  // The readiness report, so the findings travel with the data rather than
+  // living only in the terminal scrollback.
+  const findings = [
+    ...inv.analysis.blockers.map((t) => ["blocker", t]),
+    ...inv.analysis.decisions.map((t) => ["decision", t]),
+    ...inv.analysis.notes.map((t) => ["note", t]),
+  ];
+  write("findings", ["kind", "finding"], findings);
+
+  write(
+    "short-codes",
+    ["short_code", "friendly_name", "sms_url", "sid"],
+    inv.shortCodes.map((c) => [c.shortCode, c.friendlyName, c.smsUrl, c.sid]),
+  );
+
+  write(
+    "subaccounts",
+    ["sid", "friendly_name", "status"],
+    inv.subaccounts.map((s) => [s.sid, s.friendlyName, s.status]),
+  );
+
+  if (inv.perNumber) {
+    write(
+      "per-number",
+      ["number", "messages_out", "messages_in", "calls_out", "calls_in", "call_minutes"],
+      Object.entries(inv.perNumber.numbers).map(([num, r]) => [
+        num, r.messagesOut, r.messagesIn, r.callsOut, r.callsIn, r.callMinutes,
+      ]),
+    );
+  }
+
+  return written;
+}
+
 // ── Report ─────────────────────────────────────────────────────────────────
 
 function printSummary(inv) {
@@ -669,8 +789,11 @@ async function main() {
   };
 
   writeFileSync(opts.out, JSON.stringify(inventory, null, 2));
+  const csvs = opts.csv ? writeCsvs(inventory, opts.out) : [];
+
   printSummary(inventory);
   console.log(`  Written to ${opts.out}`);
+  for (const path of csvs) console.log(`             ${path}`);
   if (!opts.redact) {
     console.log("  Contains real phone numbers — re-run with --redact before sharing externally.\n");
   }

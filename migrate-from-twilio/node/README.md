@@ -4,7 +4,8 @@ Takes stock of a Twilio account before a migration: every number and what it can
 how much traffic actually flows through it, the 10DLC registrations behind that traffic,
 and the things that **can't** move to Dial as-is.
 
-Output is a single `twilio-inventory.json` plus a summary printed to your terminal.
+Output is `twilio-inventory.json`, a set of CSVs you can open straight in Excel or Sheets,
+and a summary printed to your terminal.
 
 ## What it reads
 
@@ -47,6 +48,7 @@ node inventory.mjs
 node inventory.mjs --redact          # mask phone numbers, keep counts and capabilities
 node inventory.mjs --per-number      # attribute traffic to individual numbers (slow)
 node inventory.mjs --out inv.json    # output path
+node inventory.mjs --no-csv          # JSON only, skip the spreadsheets
 ```
 
 There's no time-window flag: usage always covers the account's **full history**, starting
@@ -62,6 +64,31 @@ Twilio's Usage API reports account totals only, so this is the only way to get a
 breakdown — and on a busy account it's slow and rate-limited. Since the window is the account's
 whole life, it's capped at 50,000 records per resource (`--max-scan`); the output sets
 `perNumber.truncated` when it hits the cap, and the account-level totals stay exact either way.
+
+## The CSVs
+
+The inventory is several tables, so it becomes several sheets rather than one flattened file.
+They're named off the JSON path, so a run's files sort together:
+
+| File | One row per |
+|---|---|
+| `…​.numbers.csv` | phone number — capabilities, TwiML/SMS URLs, Messaging Service, trunk |
+| `…​.usage.csv` | month × category — long format, ready to pivot |
+| `…​.usage-totals.csv` | category — totals, averages, and the months observed |
+| `…​.findings.csv` | blocker / decision / note from the readiness report |
+| `…​.short-codes.csv` | short code (only when the account has any) |
+| `…​.subaccounts.csv` | subaccount (only when the account has any) |
+| `…​.per-number.csv` | number, with `--per-number` |
+
+Two details that matter when these land in Excel:
+
+- **Numbers stay text.** Excel reads a cell starting with `+`, `=`, `-` or `@` as a formula, which
+  mangles E.164 numbers. Those values are written with a leading apostrophe — Excel's own "treat
+  this as text" marker, invisible in the cell. The same escape defuses
+  [CSV injection](https://owasp.org/www-community/attacks/CSV_Injection), so a friendly name
+  someone typed into Twilio can't execute when you open the sheet.
+- **UTF-8 is declared.** The files carry a byte-order mark, so accented names survive the trip
+  into Excel instead of arriving as mojibake.
 
 ## Subaccounts
 
