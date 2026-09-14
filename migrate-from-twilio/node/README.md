@@ -1,8 +1,11 @@
 # Twilio → Dial migration inventory
 
-Takes stock of a Twilio account before a migration: every number and what it can do,
-how much traffic actually flows through it, the 10DLC registrations behind that traffic,
-and the things that **can't** move to Dial as-is.
+Takes stock of a Twilio account before a migration: every number and what it can do, how
+it's wired today, how much traffic actually flows through it, and the 10DLC registrations
+behind that traffic.
+
+It **reports, it doesn't advise** — everything in the output is a fact read from Twilio.
+No recommendations, no pricing, no judgement about what should move.
 
 Output is `twilio-inventory.json`, a set of CSVs you can open straight in Excel or Sheets,
 and a summary printed to your terminal.
@@ -18,9 +21,6 @@ and a summary printed to your terminal.
 | Traffic | `Usage/Records/Monthly` — SMS, MMS and calls, inbound and outbound, by month, from day one |
 | Messaging Services | `Services` and their inbound webhooks |
 | 10DLC | `a2p/BrandRegistrations` and each service's `Compliance/Usa2p` campaign |
-
-From that it derives a readiness report — **blockers** (things Dial doesn't do), **decisions**
-(things that move but change shape), and a rough monthly cost at Dial list prices.
 
 ## Safety
 
@@ -75,7 +75,6 @@ They're named off the JSON path, so a run's files sort together:
 | `…​.numbers.csv` | phone number — capabilities, TwiML/SMS URLs, Messaging Service, trunk |
 | `…​.usage.csv` | month × category — long format, ready to pivot |
 | `…​.usage-totals.csv` | category — totals, averages, and the months observed |
-| `…​.findings.csv` | blocker / decision / note from the readiness report |
 | `…​.short-codes.csv` | short code (only when the account has any) |
 | `…​.subaccounts.csv` | subaccount (only when the account has any) |
 | `…​.per-number.csv` | number, with `--per-number` |
@@ -97,20 +96,15 @@ numbers and traffic live on the subaccount that owns them, not on the parent.
 
 ## Reading the output
 
-The summary ends with three lists:
-
-- **Blockers** — non-US numbers, short codes, fax, SIP trunks. These need a decision that isn't
-  "move it to Dial".
-- **Decisions** — numbers answering with TwiML, per-number SMS webhooks, existing 10DLC campaigns.
-  These migrate, but the shape changes; the [migration guide](https://docs.getdial.ai/documentation/migrate/twilio)
-  covers each one.
-- **Notes** — MMS and toll-free, which have their own wrinkles.
-
-The cost estimate is an upper bound at list prices: it uses the US SMS rate for all messages and
-ignores volume pricing. It's for sizing a conversation, not for signing.
+`twilio-inventory.json` holds everything; the CSVs are the same data split into sheets.
+The terminal summary is just the headline counts — numbers by capability, and total and
+average monthly volume per category over the account's full history.
 
 ## Next
 
-Send `twilio-inventory.json` (run with `--redact` if it's going out before a contract) to your Dial
-contact, or work through it yourself with the
+Send the output — the JSON, the CSVs, or both — to your Dial contact. Run it with `--redact`
+if it's going out before a contract is in place.
+
+For what the data means for a migration — what moves cleanly, what changes shape, and what
+Dial doesn't do — see the
 [Migrate from Twilio](https://docs.getdial.ai/documentation/migrate/twilio) guide.

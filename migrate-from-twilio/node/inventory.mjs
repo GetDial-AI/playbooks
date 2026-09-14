@@ -3,10 +3,13 @@
  * Twilio → Dial migration inventory.
  *
  * Reads a Twilio account and writes `twilio-inventory.json` — plus a set of
- * spreadsheet-ready CSVs — describing everything that has to be accounted for
- * in a migration: the numbers and what they can do, how much traffic actually
- * flows through them, the 10DLC registrations behind that traffic, and the
- * things Dial cannot take as-is.
+ * spreadsheet-ready CSVs — describing what is on it: the numbers and what they
+ * can do, how they are wired today, how much traffic actually flows through
+ * them, and the 10DLC registrations behind that traffic.
+ *
+ * It reports, it does not advise. Customers run this against their own account
+ * and send back the result, so everything here is a fact read from Twilio —
+ * no recommendations, no pricing, no judgement about what should move.
  *
  * Two properties are deliberate, because the people running this are handing a
  * script their production telecom credentials:
@@ -49,16 +52,6 @@ function loadDotEnv(path = new URL(".env", import.meta.url)) {
 }
 
 loadDotEnv();
-
-// ── Dial list prices, for the cost estimate ────────────────────────────────
-// Published at https://getdial.ai/pricing. These are list rates: volume
-// pricing is a conversation, not a constant, so the estimate is an upper bound.
-const DIAL_RATES = {
-  numberPerMonth: 3.0,
-  smsPerMessageUS: 0.02,
-  voicePerMinuteManaged: 0.22,
-  voicePerMinuteSelfHosted: 0.13,
-};
 
 // Usage categories worth pulling. Twilio exposes hundreds; these are the ones
 // that map onto something Dial either charges for or cannot do.
@@ -436,119 +429,7 @@ async function fetchPerNumber(sid, since, maxScan, redact) {
   };
 }
 
-// ── Analysis ───────────────────────────────────────────────────────────────
 
-/**
- * The part a human actually reads: what moves cleanly, what needs a decision,
- * and what Dial does not do at all. Everything here is derived from the data
- * above — no extra API calls.
- */
-function analyze({ numbers, shortCodes, usage, messagingServices }) {
-  const blockers = [];
-  const decisions = [];
-  const notes = [];
-
-  const nonUS = numbers.filter((n) => n.country === "non-US");
-  if (nonUS.length) {
-    blockers.push(
-      `${nonUS.length} number(s) are outside the US/CA. Dial provisions US numbers today, so these need a ` +
-        `plan of their own — keep them where they are, or replace the workflow with a US number.`,
-    );
-  }
-
-  if (shortCodes.length) {
-    blockers.push(
-      `${shortCodes.length} short code(s) in use. Dial does not offer short codes; short-code traffic has to ` +
-        `move to long codes or stay put.`,
-    );
-  }
-
-  const faxOnly = numbers.filter((n) => n.capabilities.fax && !n.capabilities.voice && !n.capabilities.sms);
-  if (faxOnly.length) {
-    blockers.push(`${faxOnly.length} fax-only number(s). Dial does not carry fax.`);
-  }
-
-  const trunked = numbers.filter((n) => n.trunkSid);
-  if (trunked.length) {
-    blockers.push(
-      `${trunked.length} number(s) are attached to a SIP trunk. Dial is an API/agent platform, not a SIP ` +
-        `carrier — trunked numbers need a different home.`,
-    );
-  }
-
-  const mmsUsed = (usage.totals["mms-outbound"]?.totalCount || 0) + (usage.totals["mms-inbound"]?.totalCount || 0);
-  if (mmsUsed > 0) {
-    notes.push(`${mmsUsed} MMS message(s) in the window — Dial sends media, confirm the formats you rely on.`);
-  }
-
-  const withVoiceApp = numbers.filter((n) => n.voiceUrl || n.voiceApplicationSid);
-  if (withVoiceApp.length) {
-    decisions.push(
-      `${withVoiceApp.length} number(s) answer calls with TwiML. Dial answers with an AI voice agent driven by an ` +
-        `instruction, not a TwiML document — each of these flows has to be rewritten as an inbound instruction, or ` +
-        `run self-hosted over a WebSocket if you want to keep your own logic.`,
-    );
-  }
-
-  const withSmsWebhook = numbers.filter((n) => n.smsUrl || n.smsApplicationSid);
-  if (withSmsWebhook.length) {
-    decisions.push(
-      `${withSmsWebhook.length} number(s) post inbound SMS to a webhook. On Dial this becomes one account-level ` +
-        `webhook subscription (or an event stream), not a per-number URL.`,
-    );
-  }
-
-  const campaigns = messagingServices.flatMap((s) => s.campaigns);
-  if (campaigns.length) {
-    decisions.push(
-      `${campaigns.length} A2P 10DLC campaign(s) registered on Twilio. Registrations belong to the account that ` +
-        `filed them and do not transfer — you re-register on Dial. Keep the Twilio campaign alive until cutover ` +
-        `is finished.`,
-    );
-  }
-
-  const tollFree = numbers.filter((n) => /^\+1(800|833|844|855|866|877|888)/.test(n.number));
-  if (tollFree.length) {
-    notes.push(`${tollFree.length} toll-free number(s) — toll-free verification is a separate process from 10DLC.`);
-  }
-
-  return { blockers, decisions, notes };
-}
-
-/** Upper-bound monthly estimate at Dial list prices. */
-function estimate({ numbers, usage }) {
-  const movable = numbers.filter((n) => n.country === "US/CA").length;
-  const smsPerMonth =
-    (usage.totals["sms-outbound"]?.avgMonthlyCount || 0) + (usage.totals["sms-inbound"]?.avgMonthlyCount || 0);
-  const voiceMinutesPerMonth =
-    (usage.totals["calls-outbound"]?.avgMonthlyUsage || 0) + (usage.totals["calls-inbound"]?.avgMonthlyUsage || 0);
-
-  const numberCost = movable * DIAL_RATES.numberPerMonth;
-  const smsCost = smsPerMonth * DIAL_RATES.smsPerMessageUS;
-  const voiceManaged = voiceMinutesPerMonth * DIAL_RATES.voicePerMinuteManaged;
-  const voiceSelfHosted = voiceMinutesPerMonth * DIAL_RATES.voicePerMinuteSelfHosted;
-
-  const round = (n) => Number(n.toFixed(2));
-  return {
-    basis: {
-      numbersPricedUS: movable,
-      avgMonthlySms: smsPerMonth,
-      avgMonthlyVoiceMinutes: Number(voiceMinutesPerMonth.toFixed(1)),
-      rates: DIAL_RATES,
-    },
-    monthly: {
-      numbers: round(numberCost),
-      sms: round(smsCost),
-      voiceManaged: round(voiceManaged),
-      voiceSelfHosted: round(voiceSelfHosted),
-      totalWithManagedVoice: round(numberCost + smsCost + voiceManaged),
-      totalWithSelfHostedVoice: round(numberCost + smsCost + voiceSelfHosted),
-    },
-    caveat:
-      "List prices, US SMS rate, and average monthly volume. International SMS is tiered, and volume pricing is " +
-      "not reflected here — treat this as an upper bound, not a quote.",
-  };
-}
 
 // ── CSV ────────────────────────────────────────────────────────────────────
 
@@ -633,15 +514,6 @@ function writeCsvs(inv, outPath) {
       ]),
   );
 
-  // The readiness report, so the findings travel with the data rather than
-  // living only in the terminal scrollback.
-  const findings = [
-    ...inv.analysis.blockers.map((t) => ["blocker", t]),
-    ...inv.analysis.decisions.map((t) => ["decision", t]),
-    ...inv.analysis.notes.map((t) => ["note", t]),
-  ];
-  write("findings", ["kind", "finding"], findings);
-
   write(
     "short-codes",
     ["short_code", "friendly_name", "sms_url", "sid"],
@@ -670,7 +542,7 @@ function writeCsvs(inv, outPath) {
 // ── Report ─────────────────────────────────────────────────────────────────
 
 function printSummary(inv) {
-  const { account, numbers, usage, analysis, dialEstimate } = inv;
+  const { account, numbers, usage } = inv;
   const line = (s = "") => console.log(s);
 
   line();
@@ -704,26 +576,6 @@ function printSummary(inv) {
   }
   line();
 
-  if (analysis.blockers.length) {
-    line("  Blockers — these cannot move to Dial as-is");
-    for (const b of analysis.blockers) line(`    ✗ ${b}`);
-    line();
-  }
-  if (analysis.decisions.length) {
-    line("  Decisions — these move, but the shape changes");
-    for (const d of analysis.decisions) line(`    • ${d}`);
-    line();
-  }
-  if (analysis.notes.length) {
-    line("  Notes");
-    for (const n of analysis.notes) line(`    – ${n}`);
-    line();
-  }
-
-  const e = dialEstimate.monthly;
-  line(`  Rough Dial monthly (list prices, upper bound)`);
-  line(`    numbers ${e.numbers}  +  sms ${e.sms}  +  voice ${e.voiceManaged} managed / ${e.voiceSelfHosted} self-hosted`);
-  line(`    ≈ $${e.totalWithManagedVoice}/mo managed   ·   $${e.totalWithSelfHostedVoice}/mo self-hosted`);
   line("─".repeat(72));
   line();
 }
@@ -768,9 +620,6 @@ async function main() {
     perNumber = await fetchPerNumber(accountSid, since, opts.maxScan, opts.redact);
   }
 
-  const analysis = analyze({ numbers, shortCodes, usage, messagingServices });
-  const dialEstimate = estimate({ numbers, usage });
-
   const inventory = {
     generatedAt: new Date().toISOString(),
     generatedBy: "dial playbooks/migrate-from-twilio/node",
@@ -784,8 +633,6 @@ async function main() {
     messagingServices,
     brands,
     perNumber,
-    analysis,
-    dialEstimate,
   };
 
   writeFileSync(opts.out, JSON.stringify(inventory, null, 2));
