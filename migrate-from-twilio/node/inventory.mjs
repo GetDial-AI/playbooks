@@ -20,7 +20,7 @@
  *     file that creates, updates, or deletes anything in a Twilio account.
  *
  * Usage:
- *   node inventory.mjs [--redact] [--per-number] [--no-csv] [--out FILE]
+ *   node inventory.mjs [--per-number] [--no-csv] [--out FILE]
  */
 
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
@@ -67,18 +67,16 @@ const USAGE_CATEGORIES = [
 // ── CLI ────────────────────────────────────────────────────────────────────
 
 function parseArgs(argv) {
-  const opts = { redact: false, perNumber: false, out: "twilio-inventory.json", maxScan: 50000, csv: true };
+  const opts = { perNumber: false, out: "twilio-inventory.json", maxScan: 50000, csv: true };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--redact") opts.redact = true;
-    else if (arg === "--per-number") opts.perNumber = true;
+    if (arg === "--per-number") opts.perNumber = true;
     else if (arg === "--no-csv") opts.csv = false;
     else if (arg === "--out") opts.out = argv[++i];
     else if (arg === "--max-scan") opts.maxScan = Number(argv[++i]);
     else if (arg === "--help" || arg === "-h") {
       console.log(`Twilio → Dial migration inventory (read-only)
 
-  --redact        Mask phone numbers in the output; keep counts and capabilities
   --per-number    Also count messages/calls per number (slow; see README)
   --max-scan N    Cap records scanned by --per-number (default 50000)
   --out FILE      Output path (default twilio-inventory.json)
@@ -193,12 +191,6 @@ function toStartDate(twilioDate) {
   return parsed.toISOString().slice(0, 10);
 }
 
-/** Mask a number for sharing before a contract is signed: +1415555**** */
-function maskNumber(e164) {
-  if (typeof e164 !== "string" || e164.length < 5) return e164;
-  return e164.slice(0, -4) + "****";
-}
-
 /** Twilio reports country via the number itself; derive an ISO-ish hint. */
 function countryOf(num) {
   if (typeof num !== "string" || !num.startsWith("+")) return "unknown";
@@ -233,13 +225,13 @@ async function fetchSubaccounts(sid) {
     .map((a) => ({ sid: a.sid, friendlyName: a.friendly_name, status: a.status }));
 }
 
-async function fetchNumbers(sid, redact) {
+async function fetchNumbers(sid) {
   const numbers = await twilioList(`${A(sid)}/IncomingPhoneNumbers.json?PageSize=1000`, "incoming_phone_numbers");
   return numbers.map((n) => ({
     sid: n.sid,
-    number: redact ? maskNumber(n.phone_number) : n.phone_number,
+    number: n.phone_number,
     country: countryOf(n.phone_number),
-    friendlyName: redact ? undefined : n.friendly_name,
+    friendlyName: n.friendly_name,
     capabilities: {
       voice: !!n.capabilities?.voice,
       sms: !!n.capabilities?.sms,
@@ -262,14 +254,14 @@ async function fetchNumbers(sid, redact) {
   }));
 }
 
-async function fetchShortCodes(sid, redact) {
+async function fetchShortCodes(sid) {
   const codes = await twilioList(`${A(sid)}/SMS/ShortCodes.json?PageSize=1000`, "short_codes", {
     tolerate404: true,
   });
   return codes.map((c) => ({
     sid: c.sid,
-    shortCode: redact ? "****" : c.short_code,
-    friendlyName: redact ? undefined : c.friendly_name,
+    shortCode: c.short_code,
+    friendlyName: c.friendly_name,
     smsUrl: c.sms_url || null,
   }));
 }
@@ -382,7 +374,7 @@ async function fetchBrands() {
  * Calls lists. That is slow and rate-limited on a busy account, which is why
  * it is opt-in and capped.
  */
-async function fetchPerNumber(sid, since, maxScan, redact) {
+async function fetchPerNumber(sid, since, maxScan) {
   const counts = new Map();
   /** Get (or create) the tally row for a number, so callers can just increment. */
   const rowFor = (num) => {
@@ -426,11 +418,9 @@ async function fetchPerNumber(sid, since, maxScan, redact) {
     row.callMinutes += Math.ceil((Number(c.duration) || 0) / 60);
   }
 
-  // These keys include counterparty and subaccount numbers, not just the ones
-  // on this account — so --redact has to reach them too.
-  const numbers = Object.fromEntries(
-    [...counts.entries()].map(([num, row]) => [redact ? maskNumber(num) : num, row]),
-  );
+  // Keys here include counterparty and subaccount numbers, not just the ones
+  // on this account.
+  const numbers = Object.fromEntries(counts);
 
   return {
     since,
@@ -492,7 +482,6 @@ function buildCsv(inv) {
     ["subaccounts", inv.subaccounts.length],
     ["numbers", inv.numbers.length],
     ["short_codes", inv.shortCodes.length],
-    ["redacted", inv.redacted],
     ["generated_at", inv.generatedAt],
   ]);
 
@@ -682,10 +671,10 @@ async function main() {
   const subaccounts = await fetchSubaccounts(accountSid);
 
   step("phone numbers");
-  const numbers = await fetchNumbers(accountSid, opts.redact);
+  const numbers = await fetchNumbers(accountSid);
 
   step("short codes");
-  const shortCodes = await fetchShortCodes(accountSid, opts.redact);
+  const shortCodes = await fetchShortCodes(accountSid);
 
   // Parent-only, so the traffic matches the numbers listed above it.
   step(`usage (since ${since})`);
@@ -708,13 +697,12 @@ async function main() {
   let perNumber = null;
   if (opts.perNumber) {
     step(`per-number traffic (scanning up to ${opts.maxScan} records each)`);
-    perNumber = await fetchPerNumber(accountSid, since, opts.maxScan, opts.redact);
+    perNumber = await fetchPerNumber(accountSid, since, opts.maxScan);
   }
 
   const inventory = {
     generatedAt: new Date().toISOString(),
     generatedBy: "dial playbooks/migrate-from-twilio/node",
-    redacted: opts.redact,
     since,
     account,
     subaccounts,
@@ -737,9 +725,6 @@ async function main() {
   printSummary(inventory);
   console.log(`  Written to ${opts.out}`);
   if (csvPath) console.log(`             ${csvPath}`);
-  if (!opts.redact) {
-    console.log("  Contains real phone numbers — re-run with --redact before sharing externally.\n");
-  }
 }
 
 main().catch((err) => {

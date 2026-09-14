@@ -7,6 +7,9 @@ behind that traffic.
 It **reports, it doesn't advise** — everything in the output is a fact read from Twilio.
 No recommendations, no pricing, no judgement about what should move.
 
+The output contains your real phone numbers and account identifiers; treat it as you would
+any export from your Twilio console.
+
 Output is two files — `twilio-inventory.json` and `twilio-inventory.csv` — plus a summary
 printed to your terminal.
 
@@ -45,7 +48,6 @@ node inventory.mjs
 ## Options
 
 ```bash
-node inventory.mjs --redact          # mask phone numbers, keep counts and capabilities
 node inventory.mjs --per-number      # attribute traffic to individual numbers (slow)
 node inventory.mjs --out inv.json    # output path
 node inventory.mjs --no-csv          # JSON only, skip the spreadsheet
@@ -54,10 +56,6 @@ node inventory.mjs --no-csv          # JSON only, skip the spreadsheet
 There's no time-window flag: usage always covers the account's **full history**, starting
 from the month it was created. A migration wants the whole picture, and Twilio dates the
 account for us, so there's nothing to pick.
-
-**`--redact`** masks the last four digits of every number and drops friendly names. Use it when
-sharing the inventory before a contract is in place — the counts, capabilities and volumes that a
-quote is built from all survive.
 
 **`--per-number`** walks the Messages and Calls lists to attribute volume to individual numbers.
 Twilio's Usage API reports account totals only, so this is the only way to get a per-number
@@ -119,8 +117,7 @@ average monthly volume per category over the account's full history.
 
 ## Next
 
-Send the output — the JSON, the CSVs, or both — to your Dial contact. Run it with `--redact`
-if it's going out before a contract is in place.
+Send the output — the JSON, the CSV, or both — to your Dial contact.
 
 For what the data means for a migration — what moves cleanly, what changes shape, and what
 Dial doesn't do — see the
