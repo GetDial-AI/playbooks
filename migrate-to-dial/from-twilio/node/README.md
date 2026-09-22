@@ -42,7 +42,7 @@ auth token — you can delete the key when the migration is done without rotatin
 ## Setup
 
 ```bash
-cd migrate-from-twilio/node
+cd migrate-to-dial/from-twilio/node
 cp .env.example .env    # fill in your Twilio credentials
 node inventory.mjs
 ```

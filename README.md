@@ -50,11 +50,18 @@ Drive Dial from a [LangChain](https://www.langchain.com/) agent using the
 
 ### Migrating to Dial
 
-Take stock of an existing provider before moving to Dial.
+Take stock of an existing provider before moving to Dial. One playbook per provider you might
+be leaving, each a read-only inventory of that account — run it, and send the output to your
+Dial contact.
 
 | Playbook | Language | What it shows |
 |---|---|---|
-| [`migrate-from-twilio/node`](./migrate-from-twilio/node) | Node.js | Read-only inventory of a Twilio account — numbers and capabilities, how they're wired, SMS/call volume, 10DLC registrations — as one JSON file and one spreadsheet-ready CSV |
+| [`migrate-to-dial/from-twilio/node`](./migrate-to-dial/from-twilio/node) | Node.js | Read-only inventory of a Twilio account — numbers and capabilities, how they're wired, SMS/call volume, 10DLC registrations — as one JSON file and one spreadsheet-ready CSV |
+| [`migrate-to-dial/from-vonage/node`](./migrate-to-dial/from-vonage/node) | Node.js | Read-only inventory of a Vonage API account — numbers and features, the applications routing them, subaccounts, and opt-in SMS/call volume — in the same two files |
+
+These share a shape on purpose: same flags, same two output files, same stacked-CSV layout, so
+the output reads the same whichever provider it came from. A new provider is a new
+`from-<provider>/` directory alongside them.
 
 ## Running a playbook
 
@@ -76,6 +83,9 @@ New playbooks are welcome — the repo is designed to grow. To add one:
    you're demonstrating.
 2. **Create `<category>/<stack>/`** containing a self-contained example. `<stack>`
    names the language/framework — e.g. `python-fastapi`, `openai-node`, `node-next`.
+   `migrate-to-dial/` nests one level deeper (`migrate-to-dial/from-<provider>/<stack>`),
+   because there the provider being left is the axis that matters and the stack is
+   incidental.
 3. **Include a `README.md`** (what it shows, how to set up, how to run) and a
    **`.env.example`** with placeholder values.
 4. **List it** by adding a row to the matching category table above — or a new
