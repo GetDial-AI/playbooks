@@ -1,0 +1,8 @@
+# Credentials, and the inventory itself — it holds the account's real phone
+# numbers, so it must never be committed from a clone of this repo.
+.env
+vonage-inventory.json
+vonage-inventory.csv
+*-inventory.json
+*-inventory.csv
+node_modules/

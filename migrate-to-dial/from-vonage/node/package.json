@@ -1,0 +1,13 @@
+{
+  "name": "dial-migrate-from-vonage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only inventory of a Vonage API account, for planning a migration to Dial.",
+  "scripts": {
+    "start": "node inventory.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

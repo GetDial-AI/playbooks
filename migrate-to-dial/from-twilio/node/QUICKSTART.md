@@ -20,7 +20,7 @@ rotating your account.
 
 ```bash
 git clone https://github.com/GetDial-AI/playbooks
-cd playbooks/migrate-from-twilio/node
+cd playbooks/migrate-to-dial/from-twilio/node
 ```
 
 ## 3. Add your credentials
