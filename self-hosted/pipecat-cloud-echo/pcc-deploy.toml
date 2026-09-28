@@ -1,0 +1,12 @@
+agent_name = "dial-echo"
+region = "us-west"
+agent_profile = "agent-1x"
+# Clients must fetch a single-use token from /start before connecting —
+# the mode Dial's Pipecat Cloud target is built for.
+websocket_auth = "token"
+
+[scaling]
+    # One warm agent, so calls connect at pickup. 0 is fine for a cheap smoke
+    # test, but then each call after an idle spell cold-starts and the caller
+    # hears 6–11 s of silence first (measured on live calls).
+    min_agents = 1
