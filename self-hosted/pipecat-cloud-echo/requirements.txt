@@ -1,0 +1,2 @@
+pipecat-ai[websocket]>=1.10.0
+dial-sdk>=0.26.0
