@@ -36,7 +36,6 @@ pipes the raw call audio to you and your stack does the rest
 | [`self-hosted/openai-node`](./self-hosted/openai-node) | Node.js | LLM variant — driving calls with the OpenAI SDK, focused on transcript interrupts |
 | [`self-hosted/openai-python`](./self-hosted/openai-python) | Python | The same, in Python — driving calls with the OpenAI SDK over the `dial-sdk` protocol types, focused on transcript interrupts |
 | [`self-hosted/pipecat-python`](./self-hosted/pipecat-python) | Python ([Pipecat](https://pipecat.ai)) | Audio variant — running a Pipecat voice pipeline on a call: the Dial audio protocol as a Pipecat `FrameSerializer`, plus barge-in, keepalive, and format negotiation |
-| [`self-hosted/pipecat-cloud`](./self-hosted/pipecat-cloud) | Python ([Pipecat Cloud](https://pipecat.daily.co)) | Audio variant, no server to run — the same Pipecat voice agent deployed on Pipecat Cloud, with Dial starting a session per call through Pipecat's token auth |
 | [`self-hosted/pipecat-cloud-echo`](./self-hosted/pipecat-cloud-echo) | Python ([Pipecat Cloud](https://pipecat.daily.co)) | Audio variant on Pipecat Cloud, smallest possible bot — echoes the caller's audio back, so it proves the whole path with no AI keys |
 | [`self-hosted-audio-echo/node`](./self-hosted-audio-echo/node) | Node.js | Audio variant, smallest possible server — echoes the caller's audio straight back |
 | [`self-hosted-audio-echo/python`](./self-hosted-audio-echo/python) | Python | The same, in Python |

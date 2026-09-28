@@ -7,8 +7,9 @@ keys** — deploy it, point Dial at it, call your number, and you hear your own 
 That one call exercises the whole path: Dial calls the agent's `/start` endpoint with your
 Pipecat Cloud public key, connects with the single-use token it gets back, sends
 `call_connected`, and audio flows both ways through `DialFrameSerializer`. Once the echo works,
-swap in the real voice agent in [`../pipecat-cloud`](../pipecat-cloud) knowing the plumbing is
-right.
+replace the `Echo` processor in `bot.py` with your own pipeline, knowing the plumbing is right: the
+transport and serializer stay exactly as they are. The [`pipecat-python`](../pipecat-python)
+playbook shows a full speech-to-text → LLM → text-to-speech pipeline to borrow from.
 
 ## What's here
 
